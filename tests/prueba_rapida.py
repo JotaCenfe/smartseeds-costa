@@ -14,8 +14,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src import cobertura, nisar, terreno  # noqa: E402
-from src.aptitud import aptitud, cargar_requisitos  # noqa: E402
+from src import cobertura, nisar, sentinel, terreno  # noqa: E402
+from src.aptitud import aptitud, aptitud_detalle, cargar_requisitos  # noqa: E402
 from src.clima_relieve import corregir_temp_por_altura, nombre_tile, pendiente_grados  # noqa: E402
 from src.config import provincia_sugerida, zona_de_punto  # noqa: E402
 from src.mercado import clasificar, evidencia_local, mas_sembrados, mercado, mercado_detalle  # noqa: E402
@@ -61,6 +61,14 @@ assert aptitud(dict(costa, ph=4.3), cacao) < aptitud(dict(costa, ph=5.5), cacao)
 assert aptitud(dict(costa, agua_vecinos=0.3), cacao) < 70
 assert aptitud(dict(costa, agua_vecinos=0.3, pendiente=1), req.loc["arroz"].to_dict()) == 100
 assert aptitud(dict(costa, agua_vecinos=0.02), cacao) == 100                 # menos del 5 %: no cuenta
+# Agua en invierno (radar Sentinel-1, enero a mayo): mismos límites que el encharcamiento
+assert aptitud(dict(costa, agua_invierno=0.15), cacao) < aptitud(dict(costa, agua_invierno=0.0), cacao) == 100
+assert aptitud(dict(costa, agua_invierno=0.4), cacao) < 40                   # se inunda: no sirve para cacao
+assert aptitud(dict(costa, agua_invierno=0.4, pendiente=1), req.loc["arroz"].to_dict()) == 100
+# Con el invierno medido, los vecinos ya no cuentan (servían para suponerlo)
+assert aptitud(dict(costa, agua_invierno=0.0, agua_vecinos=0.3), cacao) == 100
+con_invierno = [f["factor"] for f in aptitud_detalle(dict(costa, agua_invierno=0.0, agua_vecinos=0.3), cacao)["factores"]]
+assert "Invierno" in con_invierno and "Alrededores" not in con_invierno
 # La papa no usa la temperatura mundial de EcoCrop (no hay rango del Ecuador): sigue con la tabla
 assert pd.isna(req.loc["papa", "temp_opt_min_C"]) and req.loc["haba", "temp_opt_max_C"] == 14
 
@@ -93,6 +101,7 @@ assert aptitud(daule, maiz) == 100                                            # 
 assert aptitud(dict(daule, lluvia_mensual=[10] * 12), maiz) < 60             # 40 mm en el ciclo: no alcanza
 arroz = req.loc["arroz"].to_dict()
 assert aptitud(daule, arroz) < aptitud(dict(daule, riego=True), arroz) < 100
+assert aptitud(dict(daule, agua_invierno=0.2, pendiente=1), arroz) == 100     # agua vista en invierno
 # ...y si el radar vio agua en el terreno, al arroz no le falta agua aunque llueva poco
 assert aptitud(dict(daule, encharcamiento=0.37, pendiente=1), arroz) == 100
 assert aptitud(dict(daule, encharcamiento=0.37, pendiente=1), maiz) < 40
@@ -190,6 +199,17 @@ assert 40 <= resumen["n"] <= 60 and 0 < resumen["con_agua"] < 0.05 and resumen["
 assert resumen["diferencia_altura"] == 0
 en_el_charco = resumen_vecinos(zona_falsa, zona_falsa.loc[charco, "lat"], zona_falsa.loc[charco, "lon"])
 assert en_el_charco["con_agua"] == 0 and en_el_charco["diferencia_altura"] == -6    # está 6 m más bajo
+
+# --- Radar de la época lluviosa (Sentinel-1) ----------------------------------
+suave = sentinel._suavizar(np.array([[1.0, 1.0, 1.0], [1.0, 10.0, 1.0], [1.0, np.nan, 1.0]], dtype="float32"))
+assert abs(suave[1, 1] - 17 / 8) < 1e-5 and np.isnan(suave[2, 1])        # promedia sin contar el hueco
+assert abs(suave[0, 0] - 13 / 4) < 1e-5                                   # en la esquina, solo lo que hay
+serie_inv = {"fechas": ["2026-01-06", "2026-02-11", "2026-03-07"],
+             "agua": np.stack([np.full((180, 180), v, dtype="float32") for v in (0.0, 0.5, np.nan)])}
+serie_inv["agua"][1, 0, 1] = 1.0
+del_terreno = sentinel.agua_del_terreno(serie_inv, [0, 1], [1, 3])
+assert del_terreno.round(3).tolist() == [0.0, 0.875] and len(del_terreno) == 2      # la fecha sin dato no sale
+assert sentinel._url(type("P", (), {"properties": {"additionalUrls": ["a_VH.tif", "a_VV.tif"]}})(), "_VV.tif") == "a_VV.tif"
 
 # --- Clima y relieve --------------------------------------------------------
 assert abs(corregir_temp_por_altura(24.0, 500, 1500) - 17.5) < 1e-6   # 1000 m más alto = 6,5 °C menos
@@ -297,6 +317,20 @@ comp = cobertura.composicion(mezcla)
 assert [(c["clase"], c["fraccion"], c["cultivable"]) for c in comp] ==     [("cultivo_activo", 0.75, True), ("construcciones", 0.25, False)]
 assert cobertura.es_cultivable(mezcla["cobertura"]).tolist() == [True, False, True]
 assert cobertura.composicion(pd.DataFrame({"altura": [1.0]})) is None
+
+# Modelo con mapa de referencia: las reglas físicas corrigen lo que dice el modelo
+prob = pd.DataFrame({"construcciones": [0.9, 0.9, 0.7, 0.2, 0.9, 0.9],
+                     "vegetacion_baja": [0.1, 0.1, 0.3, 0.8, 0.1, 0.1]})
+reglas = cobertura.aplicar_reglas(prob, agua=[0, 0, 0, 0, 0.2, 0.6], pendiente=[2, 15, 2, 2, 2, 2])
+assert reglas.tolist() == ["construcciones",      # seguro y en plano
+                           "vegetacion_baja",     # en ladera no puede ser un pueblo
+                           "vegetacion_baja",     # no está bastante seguro (menos de 0,75)
+                           "vegetacion_baja",
+                           "inundable",           # agua en el 20 % de las pasadas
+                           "agua"]                # agua en la mitad o más de las pasadas
+assert set(cobertura.CLASE_DE_REFERENCIA.values()) <= set(cobertura.CLASES)
+assert "ESA WorldCover" in cobertura.texto_evaluacion({"referencia": "ESA WorldCover 2021 v200", "acierto": 0.79})
+assert "79%" in cobertura.texto_evaluacion({"referencia": "ESA WorldCover 2021 v200", "acierto": 0.79})
 
 print("TODO BIEN: aptitud graduada, riego, lluvia del ciclo, orden, suelo, mercado, provincia, vecinos, "
       "clima/relieve, zonas, terreno dibujado, "

@@ -1,7 +1,7 @@
 # SmartSeeds · contexto para retomar el trabajo
 
 Archivo de traspaso. Resume lo que no se ve leyendo el código: decisiones, hallazgos
-y en qué punto quedó cada cosa. Estado al sábado 14 de noviembre de 2026, 17:15.
+y en qué punto quedó cada cosa. Estado al sábado 14 de noviembre de 2026, 19:10.
 El detalle de instalación y recursos está en `README.md` y `README_PROGRAMADOR.md`.
 
 ## El proyecto
@@ -41,6 +41,8 @@ python -m src.nisar ZONA humedad              # SME2 en remoto -> humedad_ZONA.n
 python -m src.nisar ZONA capas                # llena las columnas NISAR de la tabla
 python -m src.suelo_lluvia ZONA               # SoilGrids (pH, textura) y CHELSA (lluvia a 1 km) -> tabla + lluvia_mensual_ZONA.npz
 python -m src.vecindad ZONA                   # columna `agua_vecinos` (después de `nisar ZONA capas`)
+python -m src.sentinel ZONA procesar          # Sentinel-1 de enero a mayo (época lluviosa); luego `calibrar` y `tabla`
+python recolectar_referencia.py descargar worldcover ZONA   # mapa de referencia ESA WorldCover -> referencia_worldcover_ZONA.csv
 python -m src.cobertura entrenar              # modelo de tipo de terreno -> columna `cobertura` (ejecutar al final)
 python -m src.preparar_mercado                # arma tablas/mercado.csv con los Excel de datos/crudos/mercado/ (`ver` = solo mostrar)
 ```
@@ -56,19 +58,21 @@ Enlace directo a un terreno para demos: `http://localhost:8501/?lat=-0.33&lon=-7
 | `src/nisar.py` | Búsqueda en ASF, lectura remota de GCOV y SME2, capas, llenado de la tabla |
 | `src/aptitud.py` | Puntaje 0–100 por cultivo y razones en texto. Temperatura, lluvia y pH graduados entre el rango ideal y el que el cultivo aguanta (`tablas/ecocrop_cultivos.csv`) |
 | `src/suelo_lluvia.py` | SoilGrids (pH, textura, 250 m) y CHELSA (lluvia del año y de cada mes, 1 km) → columnas de la tabla. Pide rasterio (solo desarrollo) |
+| `src/sentinel.py` | Radar de la época lluviosa: Sentinel-1 (OPERA RTC-S1, banda C). Serie aparte de NISAR → `invierno_ZONA.npz` y columna `agua_invierno` |
 | `src/vecindad.py` | Agua en los terrenos vecinos (`agua_vecinos`) y resumen de lo que hay alrededor de un terreno. Solo numpy y pandas |
 | `src/mercado.py` | Regla alta / media / saturado sobre `tablas/mercado.csv`; fila de la provincia y, si no hay, la nacional (compara sin tildes ni mayúsculas) |
 | `src/preparar_mercado.py` | Arma `tablas/mercado.csv` desde los dos Excel del SIPA. Pide openpyxl (solo desarrollo) |
 | `src/recomendar.py` | Une aptitud y mercado; adjunta el suelo preferido de `tablas/suelo_cultivos.csv` (solo informativo); `reparto_mejor_cultivo()` dice qué cultivo gana en cada parte de un terreno grande |
 | `src/terreno.py` | Terreno dibujado: área (ha y cuadras), celdas que toca el contorno con su `peso` (parte de la celda ocupada) y "celda promedio" ponderada con el formato acordado. Solo numpy y pandas |
-| `src/cobertura.py` | Modelo KMeans entrenado con la serie del radar: tipo de terreno por celda (columna `cobertura`). Entrenar pide scikit-learn; la app solo lee la columna |
+| `src/cobertura.py` | Tipo de terreno por celda (columna `cobertura`). Bosque aleatorio entrenado con el radar y el mapa de referencia ESA WorldCover, más reglas físicas; si no hay referencia, KMeans. Entrenar pide scikit-learn; la app solo lee la columna |
+| `recolectar_referencia.py` | En la raíz. Lee el mapa de referencia solo en las zonas y lo resume por celda; también compara y prueba modelos |
 | `app/app.py` | Interfaz Streamlit; solo lee `datos/procesados/` y consulta POWER |
 
 Contratos acordados: tabla por celda `celda, lat, lon, altura, pendiente, temp, lluvia, humedad,
 encharcamiento, vegetacion` (más `humedad_confiable`); `aptitud(celda, cultivo) -> 0..100`;
 `mercado(cultivo, provincia) -> alta / media / saturado / sin_datos`.
 La celda puede llevar además la clave opcional `riego` (True si el agricultor dice que tiene riego); la pone la app, no está en la tabla.
-Columnas opcionales de la tabla (si faltan, ese factor no cuenta): `cobertura`, `ph`, `arcilla`, `arena`, `materia_organica`, `lluvia_power`, `agua_vecinos`. Clave opcional de la celda: `lluvia_mensual` (lista de 12), que también pone la app.
+Columnas opcionales de la tabla (si faltan, ese factor no cuenta): `cobertura`, `ph`, `arcilla`, `arena`, `materia_organica`, `lluvia_power`, `agua_vecinos`, `agua_invierno`. Clave opcional de la celda: `lluvia_mensual` (lista de 12), que también pone la app.
 
 Regla de oro: **todo lo pesado se calcula antes** y la app solo lee archivos pequeños.
 
@@ -137,6 +141,42 @@ Clave `daule`. Recuadro: lon −80.05 a −79.65, lat −2.05 a −1.65. Órbita
 - **Mercado por provincia: hecho** (ver la sección siguiente). Lo de este punto sobre "6 cultivos nacionales" y el boletín de diciembre quedó reemplazado.
 - La herramienta de lectura web de los subagentes dejó copias de los PDF y del CSV de EcoCrop (31 MB) en `C:\Users\PC\.claude\projects\C--condor\...\tool-results\`, fuera del repositorio.
 
+## Radar de la época lluviosa: Sentinel-1 (14 nov, 19:00)
+
+El usuario autorizó procesar OPERA RTC-S1 sobre Daule ("Sí, procesar", ~1,8 GB de lectura). Hecho solo en Daule.
+
+- **`src/sentinel.py`:** `procesar` (enero–mayo), `calibrar`, `tabla [UMBRAL]`, y `fecha FECHA` (uso interno: cada fecha va en su propio proceso con límite de 420 s, como en NISAR). Busca con `asf.search(dataset="OPERA-S1", processingLevel="RTC")`; los archivos están en `properties["additionalUrls"]` (`..._VV.tif`, `..._VH.tif`, `..._mask.tif`; `properties["url"]` es un `.h5` de metadatos). Se usa VV y la máscara (0 = dato bueno).
+- **Lectura:** `fs.cat_file(url)` con la sesión de `nisar.sesion_remota()` y `rasterio.io.MemoryFile`; no se guarda el GeoTIFF. ~25 s por fecha (6 ráfagas la órbita 18, 3 la órbita 40). Las 55 fechas (46 de invierno + 9 de calibración) salieron a la primera, sin cuelgues.
+- **Parciales:** `datos/procesados/_s1_tmp/ZONA_FECHA.npz` (13 MB, en `.gitignore`) guardan VV medio y el agua para los nueve umbrales de `UMBRALES_DB`: cambiar de umbral es solo `python -m src.sentinel daule tabla -20`, sin volver a leer.
+- **Umbral:** `UMBRAL_AGUA_VV_DB = -19`. Sale de `calibrar`: Sentinel-1 de la época seca a ≤ 2 días de una pasada de NISAR (9 fechas, todas de la órbita 40, un día antes de NISAR). Coincidencia cuadro por cuadro (cuadros con agua ≥ 25 % para los dos / para alguno): 27 % con −19 dB; 26 % con −18 y con −20. Es baja y está declarada. Las cantidades por mes sí se parecen a las de NISAR.
+- **Resultado:** `invierno_daule.npz` (5,9 MB: fechas, agua, vv, umbral_db) y columna `agua_invierno` (parte del cuadro con agua, promedio enero–mayo; 0 en laderas de más de 10°). Daule: 18,8 % de las celdas con ≥ 5 %, 12,3 % con ≥ 10 %, 3,0 % con ≥ 30 %. Agua en la zona: ene 0,9 %, feb 2,4 %, mar 8,0 %, abr 4,4 %, may 2,9 %.
+- **Puntaje:** factor "Invierno" (límites del encharcamiento: 0,3 no tolera, 0,6 parcial, sin límite si tolera). Con `agua_invierno` en la celda, el factor "Alrededores" (`agua_vecinos`) **no se agrega**. El arroz usa el mayor de `encharcamiento` y `agua_invierno` para decidir si "el agua ya está ahí".
+- **App:** aviso de la época lluviosa, capa "Agua en invierno (Sentinel-1)" (`CAPAS_RADAR`), gráfico por pasada dentro del desplegable del radar (`sentinel.agua_del_terreno`). El selector de capas ya no dice "NISAR" en el título.
+- **Demo nueva:** `?lat=-1.9444&lon=-79.8489` (seco para NISAR, 43 % de agua en invierno → arroz 100, palma 51). Las otras demos de Daule casi no cambian (el terreno seco baja de 100 a 99).
+- **Santo Domingo no se procesó.** Sin `agua_invierno`, ahí siguen contando los vecinos. Para procesarlo: `python -m src.sentinel santo_domingo procesar` (366 archivos, ~25 min) y `calibrar` (NISAR casi no ve agua ahí, así que la calibración dirá poco: usar el umbral de Daule).
+- **Para la Sierra:** mismos comandos; en laderas la banda C da sombras (la máscara y la regla de 10° ayudan). No se probó.
+- **Probado en pantalla:** el terreno de la demo nueva (aviso, puntaje, gráfico). **Solo por código:** la capa del mapa, un terreno dibujado.
+
+## Tipo de terreno con mapa de referencia (14 nov, 18:00)
+
+El usuario entregó `TRASPASO_SMARTSEEDS.md` (revisión del commit `ea4e0a3` hecha en otra sesión) y `recolectar_referencia.py`, y pidió seguir su sección 4. Hecho: pasos 1 y 2, y la comprobación del paso 3.
+
+- **`recolectar_referencia.py`** está en la raíz del repositorio, tal como lo entregó el usuario. Comandos: `descargar`, `comparar`, `probar`, con `worldcover` o `mapbiomas`.
+- **MapBiomas no se puede leer sin cuenta de Google** (`storage.googleapis.com/mapbiomas-public/...` responde 403 "Anonymous caller does not have storage.objects.get access"; se probaron seis rutas). El script se queda colgado en ese caso: no volver a ejecutarlo con `mapbiomas` sin los archivos locales. La página de MapBiomas citada en el traspaso dio 404. Para usarlo, el usuario tendría que bajar los tres GeoTIFF con su navegador a `datos/crudos/referencia/`.
+- **WorldCover funciona** (tile `S03W081`, 101 MB; solo se lee la ventana de 4.800 × 4.800 píxeles por zona, menos de un minuto). Reparto por cuadro: Santo Domingo árboles 85 %, pasto 13 %, construido 2 %; Daule cultivo 39 %, pasto 23 %, humedal 19 %, árboles 15 %, agua 2 %, construido 2 %.
+- **`python -m src.cobertura entrenar`** ahora elige solo: si existe `referencia_worldcover_ZONA.csv` de alguna zona usa `entrenar_con_referencia()` (bosque aleatorio, 200 árboles, `class_weight="balanced"`, rasgos del radar + pendiente); si no, el KMeans de antes (`entrenar()`). Una zona sin referencia también se clasifica, con lo aprendido en las otras.
+- Las celdas que enseñan reciben la clase de un modelo que **no vio su bloque** (`cross_val_predict` con `GroupKFold` por bloques de 30 × 30 celdas): el acierto medido vale para todo el mapa.
+- **Clases:** las mismas seis claves de antes, así la app no cambió. WorldCover → app en `CLASE_DE_REFERENCIA` (árboles → `vegetacion_densa`, cultivo → `cultivo_activo`, humedal → `inundable`, pasto, arbustos y suelo desnudo → `vegetacion_baja`). Cambiaron los nombres visibles: "Cultivo de ciclo corto" y "Pasto o vegetación baja".
+- **Reglas** (`aplicar_reglas`): `PENDIENTE_MAX_CONSTRUCCION = 10`, `PROBABILIDAD_MIN_CONSTRUCCION = 0.75` (con 0,5 acertaba el 53 % de las veces que decía "construcciones"; con 0,6 el 65 %; con 0,75 el 77 % y encuentra el 76 %), agua ≥ 0,5 → `agua`, agua ≥ 0,10 → `inundable`.
+- **Acierto:** 79 % (52 % diciendo siempre la clase más común); promedio por clase 71 %; Santo Domingo 86 %, Daule 71 %; "¿cultivo de ciclo corto?" 91 %. Guardado en `datos/procesados/cobertura_evaluacion.json`; `cobertura.texto_evaluacion()` arma la frase que muestra la app.
+- **El modelo de antes contra la misma referencia:** "construcciones" confirmadas 59 % (Santo Domingo) y 33 % (Daule); 62 laderas de más de 10° marcadas como construidas con 2 % de zona construida real.
+- El tipo de terreno **no entra en el puntaje**: avisa, deja fuera lo no cultivable en un terreno dibujado y se pinta en el mapa. Los tres terrenos de demostración dan lo mismo que antes.
+- No se usaron las clases "bosque natural" y "páramo" que proponía el traspaso: solo existen en MapBiomas. Para la Sierra (páramo) haría falta MapBiomas o aceptar que WorldCover lo llama pasto o arbustos.
+- **Al integrar la Sierra:** `python recolectar_referencia.py descargar worldcover ZONA` y luego `python -m src.cobertura entrenar` (reentrena con todas las zonas).
+- **OPERA RTC-S1 (paso 3 del traspaso), solo comprobado:** `asf.search(dataset="OPERA-S1", processingLevel="RTC", ...)`. Daule ene–may 2026: 221 archivos, 46 fechas, órbitas 18 ascendente (151) y 40 descendente (70), VV y VH. Santo Domingo ene–may: 366 archivos, 46 fechas. Jun–oct: 236 y 357 archivos, 50 fechas. A ~8 MB por archivo, la época lluviosa de Daule son ~1,8 GB si se descarga completa. Es banda C: guardarla como serie aparte de NISAR.
+- **Del traspaso, ya estaba hecho** antes de recibirlo: hallazgo 1 (rangos graduados, y además lluvia de CHELSA y suelo de SoilGrids) y parte del 2 (el orden ya no depende de empates exactos). **Sigue pendiente:** hallazgo 3 (suavizar el mercado: promedios de dos años y exigir una baja de precio de al menos 5 %; decisión del equipo), y la lista "antes de entregar" (inglés, versiones en `requirements.txt`, licencia, etiquetas de fuente en `requisitos_cultivos.csv` y en la barra lateral, ejemplo 5.2 de `README_PROGRAMADOR.md`, referencias y declaración de IA).
+- **Probado en pantalla:** la frase del modelo y el tipo de terreno en un punto de Daule. **Solo por código:** el resto.
+
 ## Análisis por terreno (14 nov, 17:00)
 
 Pedido del usuario: "en cada zona que se pulsa nos da exactamente el mismo resultado"; quiere que el análisis use de verdad el terreno, los terrenos aledaños y cómo les ha ido a los cultivos cerca. Se midió y era cierto: 90 % de los terrenos de Santo Domingo y 98 % de los de Daule recibían el mismo top 3. Ahora el resultado más repetido es 27 % y 43 %.
@@ -156,7 +196,7 @@ Pedido del usuario: "en cada zona que se pulsa nos da exactamente el mismo resul
 - **Catálogo del equipo v0.7.2** (`Downloads/SMARTSEEDS_catalogo_integrado_v07.2.json`, 1,9 MB, no copiado al repositorio): sus EcoCrop coinciden con los nuestros. Sus reglas dicen que nada es "regla automática validada" y que su uso previsto es contrastar con datos satelitales en otro módulo: decirlo así en la entrega.
 - **Archivo de estadísticas del equipo** (`CÓDIGO ESTADÍSTICAS AGROPECUARIAS.json`): sin fuentes; varias cifras no coinciden con la ESPAC ni con el SIPA (detalle en el README). No se usó. Pedir fuente y año.
 - **Probado en pantalla:** punto en Santo Domingo y terreno inundado de Daule. **Solo por código:** terreno dibujado (100 celdas junto a la zona inundada: arroz 100), nivel nacional, Daule seco.
-- **Idea pendiente:** el mapa de uso de la tierra del MAG (SIGTIERRAS) diría qué cultivo hay en cada terreno vecino. Hay que pedir permiso para descargarlo; no se sabe el tamaño.
+- **Idea pendiente (sigue abierta):** el mapa de uso de la tierra del MAG (SIGTIERRAS) diría qué cultivo hay en cada terreno vecino. Hay que pedir permiso para descargarlo; no se sabe el tamaño.
 
 ## Mercado por provincia (14 nov, 15:00)
 
@@ -187,7 +227,7 @@ Analizados contra la app actual. Nada de esto está hecho todavía, salvo lo mar
 
 ## Pendientes, por prioridad
 
-1. **Segunda zona con inundación real:** hecha (Daule, ver arriba). Queda calibrar el umbral de agua y no hay fechas de época lluviosa (los datos empiezan en junio de 2026).
+1. **Segunda zona con inundación real:** hecha (Daule, ver arriba). La época lluviosa ya está cubierta con Sentinel-1 (ver "Radar de la época lluviosa"). Queda calibrar los umbrales de agua con datos de campo.
 2. **Requisitos de cultivos:** `tablas/requisitos_cultivos.csv` tiene valores **preliminares** escritos de memoria. Verificar con FAO EcoCrop / INIAP. Los 5 cultivos de Sierra se agregaron solo para probar.
    - El equipo entregó `catalogo_cultivos_v01.json` (14 nov): 15 cultivos con **suelo** (pH, textura, drenaje, materia orgánica, salinidad) de tres fuentes con página, y 5 candidatos sin datos (rosa, clavel, aguacate, mora, uvilla). Se copió tal cual a `tablas/suelo_cultivos.csv` y la app lo muestra en la ficha del cultivo **sin usarlo en el puntaje** (el catálogo pide no tratarlo como umbral, y la app no mide el suelo del terreno).
    - El catálogo **no trae altura, temperatura ni lluvia**. Sin esos rangos no se pueden puntuar los 9 cultivos nuevos (fréjol, arveja, lenteja, chocho, trigo, cebada, amaranto, tomate, soya): pedirlos al equipo, de las mismas fuentes.
@@ -202,7 +242,8 @@ Analizados contra la app actual. Nada de esto está hecho todavía, salvo lo mar
 - NASA POWER da un valor por celda de ~50 km: la lluvia es la misma en toda una zona.
 - La temperatura por celda se ajusta por altura con un gradiente fijo de 6,5 °C por km.
 - El umbral de agua (HH < −18 dB) y la escala de humedad (0,5 m³/m³ = saturado) son valores iniciales sin calibrar.
-- El análisis de NISAR cubre solo la época seca de 2026.
+- El análisis de NISAR cubre solo la época seca de 2026. El invierno se mira con otro radar (Sentinel-1, banda C), de un solo año, y los dos radares coinciden poco cuadro por cuadro (27 %).
+- El tipo de terreno se aprendió de un mapa de 2021 (ESA WorldCover), no de trabajo de campo: coincide con él en el 79 % de los cuadros, y "agua" y "pasto" son sus clases más débiles.
 - El suelo (SoilGrids) y la lluvia local (CHELSA) vienen de mapas mundiales hechos con modelos: son una orientación, no una medición del terreno. No son de la NASA.
 - Los rangos de los cultivos (FAO EcoCrop) son mundiales y el catálogo del equipo pide no tratarlos como reglas validadas. Los pesos de la lluvia de más, del agua en los vecinos y la franja de 5 puntos no están calibrados.
 - "Cómo les va a los cultivos cerca" es un dato de la provincia (ESPAC), no de los terrenos vecinos.

@@ -29,7 +29,8 @@ M2_POR_CUADRA = 7_056        # cuadra usada en el Ecuador: 84 m x 84 m (aproxima
 COLUMNAS_PROMEDIO = ["altura", "pendiente", "temp", "lluvia", "humedad", "encharcamiento",
                      "vegetacion", "humedad_confiable",
                      # detalle local (src/suelo_lluvia.py y src/vecindad.py); solo si la tabla las trae
-                     "ph", "arcilla", "arena", "materia_organica", "lluvia_power", "agua_vecinos"]
+                     "ph", "arcilla", "arena", "materia_organica", "lluvia_power", "agua_vecinos",
+                     "agua_invierno"]
 
 
 def vertices_de_geojson(dibujo: dict) -> list[tuple[float, float]] | None:

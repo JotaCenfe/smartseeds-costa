@@ -5,7 +5,7 @@ Contrato:  aptitud(fila_celda, fila_cultivo) -> 0..100
 
 Cómo se calcula (regla inicial, fácil de explicar y de ajustar):
   - Cada factor (altura, temperatura, lluvia, pendiente, acidez del suelo, encharcamiento,
-    agua en los terrenos vecinos, humedad) recibe una nota de 0 a 1.
+    agua en invierno o en los terrenos vecinos, humedad) recibe una nota de 0 a 1.
   - Temperatura, lluvia y acidez (pH) usan DOS rangos por cultivo (tablas/ecocrop_cultivos.csv):
     el IDEAL, donde la nota es 1, y el que el cultivo AGUANTA, donde la nota llega a 0.
     Entre uno y otro la nota baja en línea recta. Así dos terrenos parecidos ya no reciben
@@ -63,6 +63,10 @@ MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto
 # soporta el encharcamiento recibe nota 0. Valor inicial sin calibrar.
 AGUA_VECINOS_MAX = 0.5
 AGUA_VECINOS_MINIMA = 0.05    # menos del 5 % de vecinos con agua se cuenta como "nada"
+# Agua en invierno (columna `agua_invierno`, de src/sentinel.py): parte del terreno con agua entre
+# enero y mayo según el radar Sentinel-1. Se evalúa con los mismos límites del encharcamiento.
+# Cuando la celda trae este dato, los vecinos NO cuentan en el puntaje: servían para suponer si el
+# terreno se moja en invierno, y aquí eso ya está medido.
 
 ALTURA_CULTIVO_ANDINO_M = 1500   # un cultivo cuya altura mínima es esta o más se trata como andino
 
@@ -292,12 +296,13 @@ def aptitud_detalle(celda: dict, cultivo: dict) -> dict:
 
     # Si la lluvia no alcanza pero el radar vio agua sobre el terreno y el cultivo vive en el agua
     # (arroz), el agua ya está ahí: la falta de lluvia no resta.
-    agua_vista = _num(celda.get("encharcamiento"))
+    aguas = [a for a in (_num(celda.get("encharcamiento")), _num(celda.get("agua_invierno"))) if a is not None]
+    agua_vista = max(aguas) if aguas else None
     if (tolera == "si" and agua_vista is not None and agua_vista >= AGUA_VISIBLE
             and factores[-1]["nota"] is not None and factores[-1]["nota"] < 1):
         factores[-1] = {"factor": "Lluvia", "nota": 1.0,
                         "texto": "Lluvia: la lluvia sola no alcanza para este cultivo, pero el radar vio agua "
-                                 f"sobre el terreno en {agua_vista:.0%} de las pasadas: el agua ya está ahí"}
+                                 f"sobre el {agua_vista:.0%} del terreno: el agua ya está ahí"}
 
     # Pendiente: solo tiene máximo
     pendiente = _num(celda.get("pendiente"))
@@ -339,8 +344,22 @@ def aptitud_detalle(celda: dict, cultivo: dict) -> dict:
     # Agua en los terrenos vecinos (NISAR): parte de los cuadros a menos de 1 km con agua.
     # Los datos del radar son de la época seca: si los vecinos tuvieron agua entonces,
     # en invierno el terreno también puede mojarse.
+    invierno = _num(celda.get("agua_invierno"))
+    if invierno is not None:
+        limite = {"si": None, "parcial": 0.6}.get(tolera, 0.3)      # igual que el encharcamiento
+        if invierno < 0.005:
+            nota, texto = 1.0, "Invierno: el radar no vio agua acumulada en el terreno entre enero y mayo"
+        elif limite is None:
+            nota, texto = 1.0, (f"Invierno: entre enero y mayo el radar vio agua en el {invierno:.0%} del "
+                                "terreno, y este cultivo la aprovecha")
+        else:
+            nota, texto = max(0.0, 1 - invierno / limite), (
+                f"Invierno: entre enero y mayo el radar vio agua en el {invierno:.0%} del terreno; "
+                "este cultivo no lo soporta bien")
+        factores.append({"factor": "Invierno", "nota": nota, "texto": texto})
+
     vecinos = _num(celda.get("agua_vecinos"))
-    if vecinos is not None:
+    if vecinos is not None and invierno is None:
         if vecinos < AGUA_VECINOS_MINIMA:
             factores.append({"factor": "Alrededores", "nota": 1.0,
                              "texto": "Alrededores: el radar casi no vio agua en los terrenos vecinos (a menos de 1 km)"})

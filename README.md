@@ -247,8 +247,10 @@ streamlit run app/app.py             # abre la app en http://localhost:8501
 |---|---|
 | `app/app.py` | Mapa: tocas un terreno y muestra los 3 mejores cultivos con sus razones. Nivel nacional con clima real de NASA POWER. |
 | `src/terreno.py` | **Terreno dibujado.** En la app se elige "✏️ Dibujar mi terreno" y se marcan las esquinas (todas las que hagan falta, para seguir curvas y linderos). Con el botón ✎ se arrastran las esquinas para corregir y se crean esquinas nuevas desde los puntos medios. Calcula el tamaño en hectáreas y cuadras y **pesa cada cuadro de datos (~250 m) según la parte que el terreno ocupa de él**, así el resultado sigue la forma dibujada. Si el terreno es grande, dice qué cultivo conviene en cada parte. Un terreno que cabe en un solo cuadro (~6 ha) usa ese cuadro: los datos no tienen más detalle. |
-| `src/cobertura.py` | **Tipo de terreno según el radar.** Un modelo de agrupamiento (KMeans) entrenado con las pasadas de NISAR separa: zona construida, agua, terreno que se inunda, cultivo de ciclo corto en actividad, árboles o vegetación densa y vegetación baja. La app lo muestra, avisa si el punto es zona construida y deja lo construido fuera del análisis de un terreno dibujado. |
+| `recolectar_referencia.py` | **Mapa de referencia.** Lee ESA WorldCover (o MapBiomas, si se baja a mano) solo en las zonas y lo resume por cuadro. También compara el modelo con la referencia y prueba un modelo entrenado con ella. |
+| `src/cobertura.py` | **Tipo de terreno según el radar.** Desde las 18:00 del 14 nov lo entrena con el mapa de referencia (ver abajo). La primera versión era un modelo de agrupamiento (KMeans) entrenado con las pasadas de NISAR que separa: zona construida, agua, terreno que se inunda, cultivo de ciclo corto en actividad, árboles o vegetación densa y vegetación baja. La app lo muestra, avisa si el punto es zona construida y deja lo construido fuera del análisis de un terreno dibujado. |
 | `src/suelo_lluvia.py` | **Suelo y lluvia con detalle local.** Agrega a la tabla el pH y la textura de SoilGrids (250 m) y la lluvia de CHELSA (1 km, del año y de cada mes). |
+| `src/sentinel.py` | **Radar de la época lluviosa.** Lee Sentinel-1 (OPERA RTC-S1 de la NASA) de enero a mayo, detecta el agua con un umbral calibrado contra NISAR y escribe la columna `agua_invierno`. |
 | `src/vecindad.py` | **Los terrenos vecinos.** Calcula cuántos cuadros a menos de 1 km tuvieron agua según el radar y resume qué hay alrededor de un terreno. |
 | `src/config.py` | Rutas, zonas de demostración y formato de la tabla por celda. **Aquí se agrega la zona de la Sierra.** |
 | `src/aptitud.py` | Puntaje 0–100 por cultivo y razones en lenguaje sencillo. Incluye la regla del **riego** (ver abajo). |
@@ -284,6 +286,118 @@ La app hace dos preguntas sencillas al agricultor antes de recomendar.
 - Cada cultivo muestra cuánto tarda la primera cosecha y de qué tipo es (columnas `ciclo_meses` y `tipo`
   de `requisitos_cultivos.csv`, todavía **preliminares**). No hay datos de costos: solo se dice que un
   cultivo permanente suele pedir más inversión al inicio.
+
+### Radar de la época lluviosa: Sentinel-1 en Daule (14 nov, 19:00)
+
+NISAR solo tiene pasadas desde junio de 2026, es decir, de la época seca. Para saber dónde se acumula el
+agua en invierno se procesó otro radar: Sentinel-1 (ESA), en el producto **OPERA RTC-S1** que elabora el
+JPL de la NASA y distribuye ASF (banda C, polarización VV, 30 m). NISAR sigue siendo el dato central; esta
+serie va aparte (`src/sentinel.py`) y no se mezcla con los rasgos de NISAR.
+
+```
+python -m src.sentinel daule procesar     # enero a mayo -> datos/procesados/_s1_tmp/ (se puede repetir)
+python -m src.sentinel daule calibrar     # compara con NISAR en fechas cercanas y propone el umbral
+python -m src.sentinel daule tabla        # invierno_daule.npz y columna `agua_invierno`
+```
+
+- **Lo leído:** 46 fechas, del 2 de enero al 30 de mayo de 2026 (órbitas 18 ascendente y 40 descendente),
+  con el 100 % de la zona cubierta en todas. Cada archivo (~7 MB) se trae a la memoria y no se guarda: en
+  el disco quedan solo los resúmenes por fecha. Unos 25 segundos por fecha; ninguna falló.
+- **Cómo se detecta el agua:** promedio de 3 × 3 píxeles (~90 m) y luego VV por debajo de un umbral en dB.
+  Se descartan los píxeles que el producto marca como sombra o inversión del relieve.
+- **El umbral se eligió comparando con NISAR**, no a ojo. Se leyeron además 9 fechas de Sentinel-1 de la
+  época seca que caen un día antes de una pasada de NISAR, y se comparó el agua de los dos radares cuadro
+  por cuadro con nueve umbrales (de −14 a −22 dB). El que más se parece es **−19 dB**.
+
+| Umbral VV | Cuadros con agua para los dos | Solo Sentinel-1 | Solo NISAR | Coincidencia |
+|---|---|---|---|---|
+| −17 dB | 3.589 | 10.820 | 767 | 24 % |
+| −18 dB | 3.331 | 8.621 | 1.025 | 26 % |
+| **−19 dB** | 2.959 | 6.686 | 1.397 | **27 %** |
+| −20 dB | 2.478 | 5.112 | 1.878 | 26 % |
+| −21 dB | 2.012 | 3.726 | 2.344 | 25 % |
+
+- **La coincidencia cuadro por cuadro es baja (27 %)** y hay que decirlo. Son dos radares distintos: la
+  banda C ve oscuros los rastrojos lisos y los arrozales recién sembrados, y la banda L ve brillante un
+  arrozal con plantas. Lo que sí coincide es la cantidad y el ritmo: con −19 dB, Sentinel-1 da agua en el
+  1,6 % de la zona en julio, 1,0 % en agosto, 1,1 % en septiembre y 4,5 % en octubre; NISAR da 0,8–1,0 %,
+  0,3 %, 0,1–0,3 % y 0,4–4,0 %.
+- **El invierno se ve claro:** agua en el 0,9 % de la zona en enero, 2,4 % en febrero, **8,0 % en marzo**,
+  4,4 % en abril y 2,9 % en mayo.
+- **Comprobación con el mapa ESA WorldCover 2021:** de los cuadros con agua en invierno (10 % o más del
+  cuadro), el 57 % es humedal, el 27 % cultivo, el 14 % agua, el 2 % pasto, el 1 % árboles y ninguno es
+  zona construida. Encuentra el 45 % del agua y de los humedales de ese mapa.
+
+| Cuadros de Daule con agua | Época seca (NISAR) | Invierno (Sentinel-1) |
+|---|---|---|
+| En el 5 % del cuadro o más | 7,2 % | 18,8 % |
+| En el 10 % o más | 3,8 % | 12,3 % |
+| En el 30 % o más | 0,3 % | 3,0 % |
+
+- **El 6,8 % de los cuadros de Daule se ve seco en la época seca pero tiene agua en invierno.** Antes la
+  app les recomendaba cualquier cultivo; ahora no.
+- **En el puntaje** (`src/aptitud.py`): factor nuevo "Invierno", con los mismos límites del encharcamiento.
+  Baja a los cultivos que no soportan el agua y favorece al arroz. Cuando un terreno tiene este dato, los
+  terrenos vecinos dejan de contar en el puntaje: servían para suponer si se moja en invierno, y aquí eso
+  ya está medido. Para el arroz, el agua vista en invierno también cubre la falta de lluvia.
+- **Efecto en Daule:** el arroz queda primero en el 23 % de los terrenos (antes en el 10 %) y el resultado
+  más repetido baja del 43 % al 38 %.
+- **En la app:** aviso "Época lluviosa: el radar vio agua en el X % de tu terreno", capa "Agua en invierno
+  (Sentinel-1)" y un gráfico por pasada, separado de los de NISAR.
+- **Terreno para la demostración:** `?lat=-1.9444&lon=-79.8489`. NISAR no vio agua (0 %) ni en los vecinos,
+  pero en invierno tuvo agua en el 43 % del terreno: solo arroz (100); el siguiente es palma con 51.
+- **Límites:** es un solo invierno (2026); el umbral se calibró solo en Daule y con fechas de la época seca;
+  bajo árboles la banda C no ve el agua; un cuadro oscuro puede ser suelo liso y no agua. Santo Domingo no
+  se procesó (hay 366 archivos de 46 fechas): ahí la app sigue usando los terrenos vecinos.
+
+### Tipo de terreno entrenado con un mapa de referencia (14 nov, 18:00)
+
+El primer modelo (KMeans) agrupaba los terrenos sin que nadie le dijera qué había en cada uno, y no
+había con qué medir si acertaba. Ahora aprende de un mapa ya hecho y su acierto se mide.
+
+- **Referencia:** ESA WorldCover 2021 v200 (10 m, 11 clases, exactitud mundial 76,7 %, licencia
+  CC BY 4.0; la ESA es agencia socia de Space Apps). Se lee por internet solo la ventana de cada zona:
+  `python recolectar_referencia.py descargar worldcover` crea
+  `datos/procesados/referencia_worldcover_ZONA.csv`, con la parte de cada cuadro que ocupa cada clase.
+- **MapBiomas Ecuador** (la fuente que el equipo prefería) **no se pudo usar**: su archivo pide iniciar
+  sesión con una cuenta de Google. Si alguien baja `ecuador_coverage_2022.tif`, `_2023.tif` y `_2024.tif`
+  con el navegador y los guarda en `datos/crudos/referencia/`, el mismo script los usa.
+- **Modelo:** bosque aleatorio (scikit-learn) con los 7 rasgos del radar NISAR más la pendiente. Aprende
+  solo de los cuadros donde una clase ocupa al menos el 60 % (41.568 de 57.035). Luego clasifica todos
+  los cuadros con el radar de 2026: `python -m src.cobertura entrenar`.
+- **Reglas físicas encima del modelo:** agua en la mitad o más de las pasadas = "agua"; agua en el 10 %
+  o más = "terreno que se inunda"; con más de 10° de pendiente, o si el modelo no está bastante seguro
+  (probabilidad menor de 0,75), no se marca "zona construida".
+- **Acierto, medido en bloques de ~7,5 km que el modelo no vio:** coincide con la referencia en el
+  **79 %** de los cuadros (decir siempre la clase más común daría 52 %). Santo Domingo 86 %, Daule 71 %.
+
+| Tipo de terreno | Encuentra | Acierta cuando lo dice |
+|---|---|---|
+| Árboles o vegetación densa | 86 % | 95 % |
+| Cultivo de ciclo corto | 73 % | 82 % |
+| Zona construida | 76 % | 77 % |
+| Terreno que se inunda | 72 % | 60 % |
+| Pasto o vegetación baja | 70 % | 51 % |
+| Agua | 47 % | 44 % |
+
+- "¿Es cultivo de ciclo corto, sí o no?": acierta en el 91 % de los cuadros.
+- **Comparación con el modelo anterior** (mismo mapa de referencia): cuando decía "zona construida"
+  acertaba el 59 % en Santo Domingo y el 33 % en Daule, y marcaba como construidas 62 laderas de más
+  de 10° que no lo eran. Solo encontraba el 27 % del agua y de los humedales de Daule.
+- **Resultado:** Santo Domingo, 78 % árboles, 19 % pasto o vegetación baja, 3 % zona construida.
+  Daule, 36 % cultivo de ciclo corto, 31 % pasto o vegetación baja, 21 % terreno que se inunda, 9 %
+  árboles, 2 % agua, 1 % zona construida.
+- **Comprobación a ojo:** el centro de Santo Domingo (25 de 25 cuadros construidos), Salitre (12 de 25),
+  Daule (14 de 25) y el terreno inundado de la demostración (terreno que se inunda).
+- **Límites:** la referencia es de 2021 y es un mapa, no trabajo de campo. No separa un bosque de un
+  cultivo de árboles (cacao, palma, banano). "Agua" es la clase más débil: un río angosto no llena un
+  cuadro de 250 m. No cambia el puntaje: sirve para avisar y para dejar fuera lo que no es cultivable.
+- El archivo `datos/procesados/cobertura_evaluacion.json` guarda estas cifras; la app las muestra.
+
+**Radar de la época lluviosa (ya procesado en Daule: ver la sección anterior).** NISAR solo tiene pasadas desde junio de 2026.
+El producto OPERA RTC-S1 (Sentinel-1, banda C, 30 m, en ASF) sí tiene la época lluviosa: sobre Daule hay
+221 archivos de 46 fechas entre enero y mayo de 2026 (órbitas 18 ascendente y 40 descendente), y sobre
+Santo Domingo 366 archivos de 46 fechas. Serviría para ver la inundación de invierno. No se ha descargado.
 
 ### El análisis ya depende del terreno (14 nov, 17:00)
 

@@ -27,7 +27,7 @@ from src.clima_relieve import cargar_celdas, celda_mas_cercana, clima_power, rut
 from src.config import (CAPITALES, ZONAS, en_ecuador, forma_rejilla, provincia_sugerida,  # noqa: E402
                         zona_de_punto)
 from src.nisar import cargar_series, ruta_serie, serie_del_terreno  # noqa: E402
-from src.cobertura import CLASES, composicion, es_cultivable  # noqa: E402
+from src.cobertura import CLASES, composicion, es_cultivable, texto_evaluacion  # noqa: E402
 from src.mercado import ETIQUETAS, ETIQUETAS_EVIDENCIA, mas_sembrados  # noqa: E402
 from src.aptitud import AGUA_VISIBLE  # noqa: E402
 from src.recomendar import (BANDA_PUNTOS, PUNTAJE_MINIMO, empatados, evaluar_todos,  # noqa: E402
@@ -35,6 +35,7 @@ from src.recomendar import (BANDA_PUNTOS, PUNTAJE_MINIMO, empatados, evaluar_tod
 from src.suelo_lluvia import (cargar_lluvia_mensual, con_lluvia_mensual, lluvia_mensual_de,  # noqa: E402
                               ruta_lluvia_mensual, suelo_texto)
 from src.vecindad import resumen_vecinos  # noqa: E402
+from src.sentinel import agua_del_terreno, cargar_invierno, ruta_invierno  # noqa: E402
 from src.terreno import (area_texto, celda_promedio, celdas_del_terreno, media_con_peso,  # noqa: E402
                          vertices_de_geojson)
 from src.terreno import centro as centro_terreno  # noqa: E402  (aquí `centro` es el centro del mapa)
@@ -67,7 +68,8 @@ CREDITO_NASA = "NASA EOSDIS GIBS · VIIRS (Suomi NPP)"
 # Capas del radar que se pueden pintar sobre el mapa: nombre -> columna de la tabla por celda.
 # Cada capa usa UN solo color, de claro (poco) a oscuro (mucho).
 CAPAS_RADAR = {"Nada": None, "Tipo de terreno (modelo del radar)": "cobertura",
-               "Agua (dónde se encharca)": "encharcamiento",
+               "Agua en la época seca (NISAR)": "encharcamiento",
+               "Agua en invierno (Sentinel-1)": "agua_invierno",
                "Vegetación": "vegetacion", "Humedad del suelo": "humedad"}
 # Un color por tipo de terreno, siempre el mismo y en este orden (paleta de categorías).
 COLOR_TIPO = {"agua": (0x2A, 0x78, 0xD6), "construcciones": (0xEB, 0x68, 0x34),
@@ -75,7 +77,8 @@ COLOR_TIPO = {"agua": (0x2A, 0x78, 0xD6), "construcciones": (0xEB, 0x68, 0x34),
               "vegetacion_baja": (0xE8, 0x7B, 0xA4), "vegetacion_densa": (0x00, 0x83, 0x00)}
 RAMPA_AZUL = ((0x86, 0xB6, 0xEF), (0x0D, 0x36, 0x6B))
 RAMPA_VERDE = ((0xC8, 0xE6, 0xC0), (0x00, 0x63, 0x00))
-RAMPAS = {"encharcamiento": RAMPA_AZUL, "humedad": RAMPA_AZUL, "vegetacion": RAMPA_VERDE}
+RAMPAS = {"encharcamiento": RAMPA_AZUL, "agua_invierno": RAMPA_AZUL, "humedad": RAMPA_AZUL,
+          "vegetacion": RAMPA_VERDE}
 GRIS_SIN_RADAR = (137, 135, 129, 110)     # celdas que el radar no cubre
 OPACIDAD_CAPA = 170                       # de 0 (invisible) a 255 (tapa el mapa)
 AGUA_MUCHA = 0.5                          # agua en la mitad de las pasadas = azul más oscuro
@@ -149,6 +152,11 @@ def lluvia_de_cada_mes(clave_zona: str, modificado: float) -> dict | None:
 
 
 @st.cache_data(show_spinner=False)
+def radar_de_invierno(clave_zona: str, modificado: float) -> dict | None:
+    return cargar_invierno(clave_zona)
+
+
+@st.cache_data(show_spinner=False)
 def series_radar(clave_zona: str, modificado: float) -> dict | None:
     return cargar_series(clave_zona)
 
@@ -169,7 +177,9 @@ def imagen_capa(clave_zona: str, columna: str, modificado: float) -> np.ndarray 
         imagen[sin_radar] = GRIS_SIN_RADAR
         return imagen
     valor = tabla[columna].to_numpy(dtype="float64").reshape(filas, columnas)
-    if columna == "encharcamiento":           # solo se pinta donde hubo agua
+    if columna == "agua_invierno":            # es de otro radar: su propia cobertura
+        sin_radar = np.isnan(valor)
+    if columna in ("encharcamiento", "agua_invierno"):     # solo se pinta donde hubo agua
         visible, tono = valor >= AGUA_VISIBLE, np.clip(valor / AGUA_MUCHA, 0, 1)
     else:
         visible, tono = ~np.isnan(valor), np.clip(valor, 0, 1)
@@ -281,7 +291,7 @@ col_mapa, col_resultado = st.columns([3, 2], gap="large")
 with col_mapa:
     modo = st.radio("¿Cómo quieres marcar tu terreno?", [MODO_PUNTO, MODO_DIBUJO], horizontal=True)
     capa = CAPAS_RADAR[st.selectbox(
-        "Pintar sobre el mapa lo que vio el radar NISAR", list(CAPAS_RADAR),
+        "Pintar sobre el mapa lo que vio el radar", list(CAPAS_RADAR),
         help="Pinta las zonas detalladas (recuadros verdes) con lo que midió el radar "
              "entre junio y octubre de 2026.")]
     if capa:
@@ -427,6 +437,12 @@ with col_resultado:
                     celdas_contorno["peso"]) or 0.0
                 st.caption(f"El radar vio agua acumulada en el {con_agua:.0%} de tu terreno "
                            "en alguna de sus pasadas.")
+            if tiene(celda.get("agua_invierno")):
+                st.markdown(f"**Época lluviosa (enero a mayo):** el radar Sentinel-1 vio agua en el "
+                            f"**{celda['agua_invierno']:.0%}** de tu terreno, en promedio.")
+                st.caption("NISAR empezó a medir en junio. Para el invierno se usa Sentinel-1, otro radar "
+                           "(producto OPERA RTC-S1 de la NASA). Ve bien el agua abierta, pero menos a "
+                           "través de las plantas.")
             # Tipo de terreno según el modelo entrenado con las pasadas del radar
             if tipos:
                 st.markdown("**Qué hay en tu terreno, según el radar**")
@@ -441,9 +457,7 @@ with col_resultado:
                 elif fuera > 0:
                     st.caption(f"El {fuera:.0%} que el radar ve como zona construida o agua "
                                "no entra en el análisis de tu terreno.")
-                st.caption("Lo calcula un modelo automático que aprendió de las pasadas del "
-                           "radar entre junio y octubre de 2026. No se comprobó en el campo y "
-                           "no distingue qué cultivo es.")
+                st.caption(texto_evaluacion())
 
             # Los terrenos vecinos: qué vio el radar a menos de 1 km
             if vecinos:
@@ -454,9 +468,8 @@ with col_resultado:
                     st.markdown("- Tipo de terreno de los vecinos: " + ", ".join(partes) + ".")
                 if vecinos["con_agua"] is not None:
                     if vecinos["con_agua"] >= 0.05:
-                        st.markdown(f"- El radar vio agua en el **{vecinos['con_agua']:.0%}** de los terrenos "
-                                    "vecinos. Son pasadas de la época seca: en invierno tu terreno también "
-                                    "puede mojarse, y eso ya cuenta en el puntaje.")
+                        st.markdown(f"- En la época seca el radar vio agua en el **{vecinos['con_agua']:.0%}** "
+                                    "de los terrenos vecinos.")
                     else:
                         st.markdown("- El radar casi no vio agua en los terrenos vecinos.")
                 diferencia = vecinos.get("diferencia_altura")
@@ -483,6 +496,16 @@ with col_resultado:
                                       x_label="Fecha de la pasada",
                                       color=COLOR_LINEA.get(tema, COLOR_LINEA["light"]))
                         st.caption(ayuda)
+                    invierno = (radar_de_invierno(clave_zona, ruta_invierno(clave_zona).stat().st_mtime)
+                                if ruta_invierno(clave_zona).exists() else None)
+                    if invierno:
+                        agua_inv = agua_del_terreno(invierno, numeros, pesos) * 100
+                        if not agua_inv.empty:
+                            st.markdown("**Agua sobre el terreno en la época lluviosa (% del terreno)**")
+                            st.line_chart(agua_inv.rename("valor"), height=170, x_label="Fecha de la pasada",
+                                          color=COLOR_LINEA.get(tema, COLOR_LINEA["light"]))
+                            st.caption("Pasadas de enero a mayo del radar Sentinel-1 (otro satélite, banda C). "
+                                       "Se muestra aparte porque no es NISAR.")
         else:
             st.caption("Este punto queda fuera de la franja que cubre el radar en esta órbita.")
 

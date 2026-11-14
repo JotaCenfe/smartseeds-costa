@@ -2,6 +2,7 @@
 datos/crudos/*
 !datos/crudos/.gitkeep
 datos/procesados/_nisar_tmp/
+datos/procesados/_s1_tmp/
 *.h5
 *.hdf5
 *.nc
