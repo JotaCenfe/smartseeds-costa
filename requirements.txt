@@ -1,0 +1,8 @@
+# Solo lo que usa la app (para publicar en Streamlit Community Cloud).
+# El entorno completo de desarrollo está en environment.yml.
+streamlit
+folium
+streamlit-folium
+pandas
+numpy
+requests

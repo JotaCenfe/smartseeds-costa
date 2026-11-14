@@ -1,0 +1,49 @@
+# Entorno de Python - Condor Mission (NASA Space Apps 2026, Dancing with the SARs)
+# Enfoque: recomendación de cultivos con NISAR + datos NASA + datos locales
+#
+# Si ya creaste el entorno antes:   conda env update -f environment.yml --prune
+# Si es la primera vez:             conda env create -f environment.yml
+# Activar:                          conda activate condor
+name: condor
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  # Búsqueda y descarga de datos NASA / ASF
+  - asf_search        # NISAR (ASF)
+  - earthaccess       # login Earthdata, NASADEM, SMAP, IMERG
+  - requests          # API de NASA POWER (clima) y otras APIs
+  - tqdm
+  # Lectura de datos satelitales (HDF5 / NetCDF / GeoTIFF)
+  - h5py
+  - h5netcdf
+  - netcdf4
+  - xarray
+  - rioxarray
+  - rasterio
+  - gdal
+  # Datos geográficos
+  - geopandas
+  - shapely
+  - pyproj
+  # Cálculo y procesamiento de imagen de radar
+  - numpy
+  - pandas
+  - scipy
+  - scikit-image      # filtros de ruido (speckle) del radar
+  - scikit-learn      # clasificación de vegetación si hay tiempo
+  # Datos locales en Excel (ESPAC del INEC, precios del Ministerio de Agricultura)
+  - openpyxl
+  - xlrd
+  # Gráficos y notebooks
+  - matplotlib
+  - plotly
+  - jupyterlab
+  - ipykernel
+  # App web
+  - streamlit
+  - folium
+  - pip
+  - pip:
+      - streamlit-folium   # mapa interactivo dentro de Streamlit
+      - fpdf2              # ficha del agricultor en PDF (extra)

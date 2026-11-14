@@ -1,0 +1,22 @@
+# Datos pesados: no se suben a GitHub
+datos/crudos/*
+!datos/crudos/.gitkeep
+datos/procesados/_nisar_tmp/
+*.h5
+*.hdf5
+*.nc
+
+# Configuración local de cada computadora
+.claude/
+.vscode/
+
+# Python
+__pycache__/
+.ipynb_checkpoints/
+
+# Credenciales (nunca se suben)
+.netrc
+_netrc
+.dodsrc
+.env
+.streamlit/secrets.toml
