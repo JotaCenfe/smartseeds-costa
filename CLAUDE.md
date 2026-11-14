@@ -1,7 +1,7 @@
 # SmartSeeds · contexto para retomar el trabajo
 
 Archivo de traspaso. Resume lo que no se ve leyendo el código: decisiones, hallazgos
-y en qué punto quedó cada cosa. Estado al sábado 14 de noviembre de 2026, 13:40.
+y en qué punto quedó cada cosa. Estado al sábado 14 de noviembre de 2026, 15:15.
 El detalle de instalación y recursos está en `README.md` y `README_PROGRAMADOR.md`.
 
 ## El proyecto
@@ -39,6 +39,8 @@ python -m src.clima_relieve ZONA              # NASADEM + POWER -> tabla por cel
 python -m src.nisar ZONA procesar             # GCOV en remoto -> nisar_ZONA.npz
 python -m src.nisar ZONA humedad              # SME2 en remoto -> humedad_ZONA.npz
 python -m src.nisar ZONA capas                # llena las columnas NISAR de la tabla
+python -m src.cobertura entrenar              # modelo de tipo de terreno -> columna `cobertura` (ejecutar al final)
+python -m src.preparar_mercado                # arma tablas/mercado.csv con los Excel de datos/crudos/mercado/ (`ver` = solo mostrar)
 ```
 
 Enlace directo a un terreno para demos: `http://localhost:8501/?lat=-0.33&lon=-79.12`.
@@ -51,9 +53,11 @@ Enlace directo a un terreno para demos: `http://localhost:8501/?lat=-0.33&lon=-7
 | `src/clima_relieve.py` | NASA POWER (en vivo) y NASADEM → `datos/procesados/celdas_ZONA.csv` |
 | `src/nisar.py` | Búsqueda en ASF, lectura remota de GCOV y SME2, capas, llenado de la tabla |
 | `src/aptitud.py` | Puntaje 0–100 por cultivo y razones en texto |
-| `src/mercado.py` | Regla alta / media / saturado sobre `tablas/mercado.csv` |
+| `src/mercado.py` | Regla alta / media / saturado sobre `tablas/mercado.csv`; fila de la provincia y, si no hay, la nacional (compara sin tildes ni mayúsculas) |
+| `src/preparar_mercado.py` | Arma `tablas/mercado.csv` desde los dos Excel del SIPA. Pide openpyxl (solo desarrollo) |
 | `src/recomendar.py` | Une aptitud y mercado; adjunta el suelo preferido de `tablas/suelo_cultivos.csv` (solo informativo); `reparto_mejor_cultivo()` dice qué cultivo gana en cada parte de un terreno grande |
-| `src/terreno.py` | Terreno dibujado: área (ha y cuadras), celdas dentro del contorno y "celda promedio" con el formato acordado. Solo numpy y pandas |
+| `src/terreno.py` | Terreno dibujado: área (ha y cuadras), celdas que toca el contorno con su `peso` (parte de la celda ocupada) y "celda promedio" ponderada con el formato acordado. Solo numpy y pandas |
+| `src/cobertura.py` | Modelo KMeans entrenado con la serie del radar: tipo de terreno por celda (columna `cobertura`). Entrenar pide scikit-learn; la app solo lee la columna |
 | `app/app.py` | Interfaz Streamlit; solo lee `datos/procesados/` y consulta POWER |
 
 Contratos acordados: tabla por celda `celda, lat, lon, altura, pendiente, temp, lluvia, humedad,
@@ -116,6 +120,31 @@ Clave `daule`. Recuadro: lon −80.05 a −79.65, lat −2.05 a −1.65. Órbita
 - En `st.cache_data`, un parámetro que empieza con guion bajo **no** entra en la clave de la caché: por eso `modificado` (fecha del archivo) va sin guion bajo.
 - Probado en pantalla: gráfico en el terreno inundado de Daule y capa de agua. Las capas de vegetación y humedad, y el gráfico con un terreno dibujado, solo por código.
 
+## Tarde del 14 nov: mapa, tipo de terreno, mercado y EcoCrop
+
+- **Dibujo del terreno:** solo polígono (se quitó el rectángulo a pedido del usuario: quería formas libres y poder mover el lindero). El botón ✎ funciona. **No pasar `edit_options={"edit": True}` a `Draw`**: con eso Leaflet.draw 1.0.2 activa la edición pero falla por dentro y no aparecen las esquinas para arrastrar.
+- **Peso por celda:** `celdas_del_terreno()` revisa 6×6 puntos por celda y devuelve `peso`. El promedio, el reparto de cultivos y la serie del radar usan ese peso. El límite real de precisión sigue siendo la celda de ~250 m; bajar a ~90 m exige reprocesar las zonas y acordarlo con la Sierra (cambia `PASO_CELDA_SEG`).
+- **Fondos del mapa:** `tiles=None` + tres `TileLayer` + `LayerControl` (funciona con `st_folium` y conserva el dibujo y el acercamiento). Foto: Esri World Imagery (citar; no es NASA). NASA GIBS VIIRS llega solo a nivel 9 (~250 m); las capas HLS de 30 m devolvieron teselas vacías para la fecha probada.
+- **Tipo de terreno:** `python -m src.cobertura entrenar` entrena con todas las zonas que tengan serie, guarda `datos/procesados/modelo_cobertura.npz` y escribe la columna `cobertura` en cada tabla. Hay que **volver a ejecutarlo después de `nisar ZONA capas`** (ese comando no borra la columna, pero una zona nueva no la tendrá). Al integrar la Sierra, reentrenar con las tres zonas. Es no supervisado: los nombres salen de reglas y solo se comprobó con pueblos y la zona inundada.
+- El usuario pidió "entrenar una IA" con las pasadas para mejorar las recomendaciones. Se le explicó que no hay datos de campo (qué cultivo dio buen resultado y dónde), así que no se puede entrenar un modelo que acierte la recomendación; lo que sí se hizo es este modelo de tipo de terreno.
+- **Mercado:** `tablas/mercado.csv` con 6 cultivos nacionales 2024–2025, cifras comprobadas en el PDF de la ESPAC 2025 y en el boletín SIPA de diciembre 2025. Columnas nuevas opcionales `rendimiento_t_ha` y `rendimiento_producto`. La firma de `mercado()` no cambió. Ojo: el boletín SIPA imprime las variaciones con el signo al revés; se recalcularon desde los precios.
+- **EcoCrop:** `tablas/ecocrop_cultivos.csv` (15 cultivos, comprobados uno por uno en `ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=CODIGO`). **No se usa en el puntaje.** Simulación: mejora Santo Domingo (empates de 8 a 3) pero pone haba y maíz suave con 100 en Daule y baja la papa en la Sierra (71 a 3.000 m, 45 a 3.500 m). Decisión pendiente del equipo; hace falta un rango de altura del Ecuador (INIAP).
+- **Mercado por provincia: hecho** (ver la sección siguiente). Lo de este punto sobre "6 cultivos nacionales" y el boletín de diciembre quedó reemplazado.
+- La herramienta de lectura web de los subagentes dejó copias de los PDF y del CSV de EcoCrop (31 MB) en `C:\Users\PC\.claude\projects\C--condor\...\tool-results\`, fuera del repositorio.
+
+## Mercado por provincia (14 nov, 15:00)
+
+- El usuario autorizó descargar los 4 archivos oficiales. Están en `datos/crudos/mercado/` (no se suben): `superficie-produccion.xlsx` y `precios-productor-ponderado.xlsx` del SIPA, y los tabulados de la ESPAC 2024 y 2025 (descomprimidos en `espac_2024/` y `espac_2025/`, solo para comprobar). Ahí mismo quedó `mercado_anterior_dic_dic.csv`, la tabla de 6 cultivos anterior.
+- `python -m src.preparar_mercado` escribe `tablas/mercado.csv`: **45 filas** = 13 cultivos nacionales + 32 por provincia (16 provincias). Sin datos: **haba** (5 meses de precio, solo Carchi) y **quinua** (sin precios; además la ESPAC 2025 ya no trae su tabla por provincia y da 56 ha en el país).
+- **Método:** superficie plantada 2024 → 2025 (suma de Solo + Asociado + Invernadero = total del INEC). Precio: promedio en USD/kg de los pares provincia-mes que existen en los dos años. Umbrales elegidos por el equipo, sin calibrar: `MESES_MINIMOS = 6`, `HECTAREAS_MINIMAS = 500`. Una fila de provincia solo se escribe si la superficie **y** el precio son de esa provincia (no se mezcla superficie provincial con precio nacional).
+- **Comprobado:** los totales nacionales del Excel del SIPA son idénticos a los tabulados de la ESPAC en los 15 cultivos y los dos años; también arroz y cacao en Guayas, Santo Domingo y Cotopaxi.
+- **Cambió el método del precio** respecto a la primera versión (antes dic 2024 contra dic 2025 del boletín; ahora año contra año). Efecto: palma pasó de media a **alta**; cacao sigue saturado pero con −13 % en vez de −44 %. El usuario está avisado; si prefiere lo anterior, la copia está en `datos/crudos/mercado/`.
+- Ojo con el período: yuca da +5 % año contra año pero −45 % de diciembre a diciembre; café +33 % contra 0 %. El resultado depende mucho del período elegido.
+- **Efecto en las demos:** Santo Domingo `?lat=-0.33&lon=-79.12` → maracuyá, plátano (alta, dato provincial) y maíz duro; el cacao queda "media" en Santo Domingo. Daule seco → maíz duro 100 pero **saturado en Guayas** (+27 % de superficie, −8 % de precio).
+- Para la Sierra ya hay filas de Cotopaxi (cacao, plátano, papa) y Tungurahua (papa); papa saturada en las dos.
+- El precio nacional es un promedio simple entre provincias, no el ponderado oficial del boletín (difieren: cacao dic 2025 204,81 contra 217,80 USD por quintal).
+- En el Excel de precios hay datos de 2026 hasta octubre; no se usan porque no hay ESPAC 2026.
+
 ## Pedidos del programador de la Sierra (14 nov) y qué falta
 
 Analizados contra la app actual. Nada de esto está hecho todavía, salvo lo marcado.
@@ -137,7 +166,7 @@ Analizados contra la app actual. Nada de esto está hecho todavía, salvo lo mar
    - El equipo entregó `catalogo_cultivos_v01.json` (14 nov): 15 cultivos con **suelo** (pH, textura, drenaje, materia orgánica, salinidad) de tres fuentes con página, y 5 candidatos sin datos (rosa, clavel, aguacate, mora, uvilla). Se copió tal cual a `tablas/suelo_cultivos.csv` y la app lo muestra en la ficha del cultivo **sin usarlo en el puntaje** (el catálogo pide no tratarlo como umbral, y la app no mide el suelo del terreno).
    - El catálogo **no trae altura, temperatura ni lluvia**. Sin esos rangos no se pueden puntuar los 9 cultivos nuevos (fréjol, arveja, lenteja, chocho, trigo, cebada, amaranto, tomate, soya): pedirlos al equipo, de las mismas fuentes.
    - El "Maíz" del catálogo (libro de cultivos andinos) se asoció a `maiz_suave`; falta confirmarlo con el equipo.
-3. **Mercado:** `tablas/mercado.csv` solo tiene encabezados. Falta ESPAC y SIPA.
+3. **Mercado:** hecho para 13 cultivos (nacional y por provincia). Faltan haba y quinua (sin precios en el SIPA) y decidir con el equipo los umbrales (6 meses, 500 ha) y el período del precio.
 4. **Subir a GitHub** (repositorio público) y publicar en Streamlit Community Cloud con `requirements.txt`.
 5. Mejoras de la app: textos en inglés. (El gráfico de la serie del radar y la capa NISAR sobre el mapa ya están hechos.)
 6. Integrar la zona de la Sierra (Cotopaxi y Tungurahua) que prepara el otro programador.
@@ -148,3 +177,4 @@ Analizados contra la app actual. Nada de esto está hecho todavía, salvo lo mar
 - La temperatura por celda se ajusta por altura con un gradiente fijo de 6,5 °C por km.
 - El umbral de agua (HH < −18 dB) y la escala de humedad (0,5 m³/m³ = saturado) son valores iniciales sin calibrar.
 - El análisis de NISAR cubre solo la época seca de 2026.
+- El mercado compara solo dos años (2024 y 2025); el dato por provincia de la ESPAC viene de una encuesta por muestreo y el precio nacional es un promedio simple entre provincias.

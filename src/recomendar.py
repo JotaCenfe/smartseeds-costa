@@ -147,6 +147,8 @@ def evaluar_todos(celda: dict, provincia: str, requisitos: pd.DataFrame | None =
             "factores": det["factores"],
             "mercado": m["nivel"],
             "mercado_texto": m["texto"],
+            "rendimiento_texto": m.get("rendimiento"),       # None si no hay dato de rendimiento
+            "mercado_fuente": m.get("fuente"),
             "meses": _num(cultivo.get("ciclo_meses")),       # meses hasta la primera cosecha
             "tiempo_texto": tiempo_texto(cultivo.to_dict()),
             "_desempate": _clave_preferencia(cultivo.to_dict(), preferencia),
@@ -164,7 +166,9 @@ def reparto_mejor_cultivo(celdas: pd.DataFrame, requisitos: pd.DataFrame | None 
     """En un terreno grande: qué parte del terreno tiene a cada cultivo como mejor opción.
 
     Evalúa cada celda del terreno por separado (hasta `max_celdas`, repartidas por todo
-    el terreno) y cuenta cuál cultivo gana en cada una. Devuelve una lista ordenada de
+    el terreno) y cuenta cuál cultivo gana en cada una. Si la tabla trae la columna
+    `peso` (parte de la celda que ocupa el terreno), cada celda cuenta según ese peso.
+    Devuelve una lista ordenada de
     {"cultivo", "nombre", "fraccion"}; "ninguno" = ningún cultivo llega al puntaje mínimo.
     Los empates se resuelven con la misma preferencia que en la lista principal (aquí
     no se mira el mercado).
@@ -174,9 +178,10 @@ def reparto_mejor_cultivo(celdas: pd.DataFrame, requisitos: pd.DataFrame | None 
                       key=lambda c: _clave_preferencia(c, preferencia))
     if len(celdas) > max_celdas:
         celdas = celdas.iloc[:: math.ceil(len(celdas) / max_celdas)]
-    cuenta: dict[str, int] = {}
+    cuenta: dict[str, float] = {}
     for fila in celdas.to_dict("records"):
         fila["riego"] = riego
+        peso = fila.get("peso", 1.0)
         mejor, mejor_puntaje = "ninguno", None
         for cultivo in cultivos:
             puntaje = aptitud_detalle(fila, cultivo)["puntaje"]
@@ -185,7 +190,7 @@ def reparto_mejor_cultivo(celdas: pd.DataFrame, requisitos: pd.DataFrame | None 
             # en un empate (mismo puntaje redondeado) gana el primero según la preferencia
             if mejor_puntaje is None or round(puntaje) > round(mejor_puntaje):
                 mejor, mejor_puntaje = cultivo["cultivo"], puntaje
-        cuenta[mejor] = cuenta.get(mejor, 0) + 1
+        cuenta[mejor] = cuenta.get(mejor, 0) + peso
     total = sum(cuenta.values())
     return [{"cultivo": c,
              "nombre": NOMBRES.get(c, c.replace("_", " ").capitalize()),

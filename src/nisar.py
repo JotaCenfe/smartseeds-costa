@@ -470,11 +470,20 @@ def cargar_series(clave_zona: str) -> dict | None:
     return series
 
 
-def serie_del_terreno(series: dict, celdas) -> "pd.DataFrame | None":  # noqa: F821
+def _media_por_fecha(valores, pesos):
+    """Promedio con pesos de [fecha, celda] para cada fecha; ignora las celdas sin dato."""
+    cuenta = np.where(np.isnan(valores), 0.0, pesos[None, :])
+    total = cuenta.sum(axis=1)
+    suma = np.nansum(valores * cuenta, axis=1)
+    return np.where(total > 0, suma / np.where(total > 0, total, 1), np.nan)
+
+
+def serie_del_terreno(series: dict, celdas, pesos=None) -> "pd.DataFrame | None":  # noqa: F821
     """Lo que vio el radar en un terreno, pasada por pasada.
 
     `celdas` son los números de celda del terreno (columna `celda` de la tabla): uno
-    solo si se tocó un punto, varios si se dibujó el contorno. Devuelve una tabla con
+    solo si se tocó un punto, varios si se dibujó el contorno. `pesos` (opcional) dice
+    cuánto ocupa el terreno de cada celda; sin pesos, todas cuentan igual. Devuelve una tabla con
     una fila por fecha y las columnas (todas de 0 a 1, vacías si no hubo dato):
         vegetacion  índice de vegetación del radar (RVI) de esa pasada
         agua        parte del terreno que se vio como agua
@@ -485,19 +494,20 @@ def serie_del_terreno(series: dict, celdas) -> "pd.DataFrame | None":  # noqa: F
 
     import pandas as pd
     celdas = np.asarray(list(celdas), dtype=int)
+    pesos = np.ones(len(celdas)) if pesos is None else np.asarray(list(pesos), dtype="float64")
     columnas = series["hh"].shape[2]
     fil, col = celdas // columnas, celdas % columnas
     with warnings.catch_warnings(), np.errstate(invalid="ignore", divide="ignore"):
         warnings.simplefilter("ignore", RuntimeWarning)        # fechas o celdas sin dato
-        hh = np.nanmean(series["hh"][:, fil, col], axis=1)     # promedio en potencia lineal
-        hv = np.nanmean(series["hv"][:, fil, col], axis=1)
-        agua = np.nanmean(series["agua"][:, fil, col], axis=1)
+        hh = _media_por_fecha(series["hh"][:, fil, col], pesos)   # promedio en potencia lineal
+        hv = _media_por_fecha(series["hv"][:, fil, col], pesos)
+        agua = _media_por_fecha(series["agua"][:, fil, col], pesos)
         vegetacion = np.clip(4 * hv / (hh + hv), 0, 1)
         vegetacion[agua >= AGUA_TAPA_VEGETACION] = np.nan      # sobre el agua el índice no vale
         tabla = pd.DataFrame({"vegetacion": vegetacion, "agua": agua},
                              index=pd.to_datetime(series["fechas"]))
         if "sm" in series:
-            sm = np.nanmean(series["sm"][:, fil, col], axis=1)
+            sm = _media_por_fecha(series["sm"][:, fil, col], pesos)
             humedad = pd.Series(np.clip(sm / HUMEDAD_SATURACION, 0, 1),
                                 index=pd.to_datetime(series["fechas_humedad"]), name="humedad")
             tabla = tabla.join(humedad, how="outer")

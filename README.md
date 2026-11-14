@@ -246,10 +246,12 @@ streamlit run app/app.py             # abre la app en http://localhost:8501
 | Archivo | Estado |
 |---|---|
 | `app/app.py` | Mapa: tocas un terreno y muestra los 3 mejores cultivos con sus razones. Nivel nacional con clima real de NASA POWER. |
-| `src/terreno.py` | **Terreno dibujado.** En la app se elige "✏️ Dibujar mi terreno" y se marcan las esquinas (sirve para terrenos irregulares y grandes; también hay rectángulo, corregir y borrar). Calcula el tamaño en hectáreas y cuadras, promedia los cuadros de ~250 m que caen dentro y, si el terreno es grande, dice qué cultivo conviene en cada parte. Un terreno más pequeño que un cuadro (~6 ha) usa el cuadro donde está. |
+| `src/terreno.py` | **Terreno dibujado.** En la app se elige "✏️ Dibujar mi terreno" y se marcan las esquinas (todas las que hagan falta, para seguir curvas y linderos). Con el botón ✎ se arrastran las esquinas para corregir y se crean esquinas nuevas desde los puntos medios. Calcula el tamaño en hectáreas y cuadras y **pesa cada cuadro de datos (~250 m) según la parte que el terreno ocupa de él**, así el resultado sigue la forma dibujada. Si el terreno es grande, dice qué cultivo conviene en cada parte. Un terreno que cabe en un solo cuadro (~6 ha) usa ese cuadro: los datos no tienen más detalle. |
+| `src/cobertura.py` | **Tipo de terreno según el radar.** Un modelo de agrupamiento (KMeans) entrenado con las pasadas de NISAR separa: zona construida, agua, terreno que se inunda, cultivo de ciclo corto en actividad, árboles o vegetación densa y vegetación baja. La app lo muestra, avisa si el punto es zona construida y deja lo construido fuera del análisis de un terreno dibujado. |
 | `src/config.py` | Rutas, zonas de demostración y formato de la tabla por celda. **Aquí se agrega la zona de la Sierra.** |
 | `src/aptitud.py` | Puntaje 0–100 por cultivo y razones en lenguaje sencillo. Incluye la regla del **riego** (ver abajo). |
-| `src/mercado.py` | Regla alta / media / saturado. Devuelve "sin datos" hasta llenar `tablas/mercado.csv`. |
+| `src/mercado.py` | Regla alta / media / saturado sobre `tablas/mercado.csv`. Usa la fila de la provincia y, si no hay, la nacional. Devuelve "sin datos" si el cultivo no está. |
+| `src/preparar_mercado.py` | Arma `tablas/mercado.csv` con los archivos oficiales de la ESPAC y de precios del SIPA (se ejecuta una vez, sin internet). |
 | `src/recomendar.py` | Une aptitud + mercado. También adjunta a cada cultivo el **suelo que prefiere** (pH, textura, drenaje) leído de `tablas/suelo_cultivos.csv`. |
 | `tablas/suelo_cultivos.csv` | Suelo preferido de 15 cultivos, copiado del catálogo del equipo (`catalogo_cultivos_v01`, 14 nov) con su fuente y página. Se **muestra** en la ficha del cultivo, pero **no entra en el puntaje**: son rangos reportados por cada manual y la app todavía no mide el suelo del terreno. |
 | `src/clima_relieve.py` | NASA POWER probado. NASADEM → tabla por celda: probado. Santo Domingo ya está en `datos/procesados/celdas_santo_domingo.csv` (32.400 celdas de ~250 m). Para otra zona: `python -m src.clima_relieve NOMBRE_ZONA`. |
@@ -280,6 +282,85 @@ La app hace dos preguntas sencillas al agricultor antes de recomendar.
 - Cada cultivo muestra cuánto tarda la primera cosecha y de qué tipo es (columnas `ciclo_meses` y `tipo`
   de `requisitos_cultivos.csv`, todavía **preliminares**). No hay datos de costos: solo se dice que un
   cultivo permanente suele pedir más inversión al inicio.
+
+### Vista satelital, tipo de terreno, mercado y EcoCrop (14 nov, tarde)
+
+**Fondos del mapa** (se cambian en el cuadro de la esquina superior derecha del mapa):
+- *Croquis*: OpenStreetMap, con calles y nombres.
+- *Foto satelital*: imágenes de alta resolución de Esri World Imagery; se ven las parcelas reales y sirve
+  para dibujar el lindero. No es de la NASA: hay que citarla.
+- *NASA 31 oct (óptico)*: imagen diaria del sensor VIIRS (satélite Suomi NPP) servida por NASA GIBS, del
+  mismo día de la última pasada de NISAR sobre Daule. Tiene ~250 m de detalle y muestra las nubes: sirve
+  para explicar por qué hace falta un radar.
+
+**Tipo de terreno (modelo entrenado con las pasadas de NISAR):** `python -m src.cobertura entrenar`
+- Cada cuadro se describe por cómo se comportó el radar en las 10 pasadas: brillo medio de HH y HV, cuánto
+  cambió entre fechas, la fecha más oscura, cuántas veces tuvo agua y la diferencia HH − HV.
+- KMeans (8 grupos) junta los cuadros parecidos, sin datos de campo. Se entrenó con 57.035 cuadros de las
+  dos zonas. Cada grupo recibe nombre con reglas físicas del radar (umbrales en `src/cobertura.py`).
+- Resultado: Santo Domingo 92 % vegetación densa, 6 % vegetación baja, 2 % zona construida. Daule 67 %
+  vegetación baja, 14 % cultivo de ciclo corto en actividad, 11 % vegetación densa, 6 % terreno que se
+  inunda, 2 % zona construida.
+- Comprobación (solo con lugares conocidos): el centro de Santo Domingo y el de Salitre salen como zona
+  construida; el terreno inundado de Daule, como terreno que se inunda.
+- **Límites:** no distingue qué cultivo es; con cuadros de ~250 m solo ve las zonas más construidas (los
+  pueblos con muchos árboles salen en parte como vegetación densa); no se comprobó en el campo.
+- Entrenar necesita scikit-learn (entorno de desarrollo). La app publicada no: lee la columna `cobertura`.
+
+**Mercado con datos reales, por provincia** (`tablas/mercado.csv`, 45 filas, se compara 2024 con 2025).
+La tabla ya no se escribe a mano: la arma `python -m src.preparar_mercado` con dos archivos oficiales
+guardados en `datos/crudos/mercado/` (no se suben a GitHub; las direcciones están al inicio de ese programa).
+
+Filas nacionales (13 de los 15 cultivos):
+| Cultivo | Superficie | Precio al productor | Resultado | Rinde (t/ha) |
+|---|---|---|---|---|
+| Plátano | −16,9 % | +90,5 % | Oportunidad alta | 6,81 |
+| Maracuyá | −8,2 % | +14,7 % | Oportunidad alta | 10,55 |
+| Palma aceitera | −4,1 % | +7,5 % | Oportunidad alta | 19,99 |
+| Banano | +19,4 % | +24,6 % | Oportunidad media | 44,05 |
+| Café | +44,4 % | +33,0 % | Oportunidad media | 0,24 |
+| Yuca | +33,0 % | +4,9 % | Oportunidad media | 5,87 |
+| Maíz duro | +9,5 % | −7,5 % | Oportunidad media | 5,09 |
+| Arroz | −10,5 % | −24,4 % | Oportunidad media | 5,02 |
+| Maíz suave | −29,8 % | −26,9 % | Oportunidad media | 1,37 |
+| Tomate de árbol | −40,8 % | +4,9 % | Oportunidad media | 15,50 |
+| Cacao | +13,3 % | −13,2 % | Mercado saturado | 0,82 |
+| Piña | +51,7 % | −2,7 % | Mercado saturado | 68,18 |
+| Papa | +16,7 % | −32,1 % | Mercado saturado | 14,35 |
+
+Además hay 32 filas por provincia (16 provincias). En las zonas del proyecto: Santo Domingo (cacao, plátano,
+maracuyá, yuca, piña), Guayas (cacao, banano, maíz duro, arroz), Cotopaxi (cacao, plátano, papa) y
+Tungurahua (papa). Si un cultivo no tiene fila de la provincia, la app usa la nacional y lo dice.
+La provincia puede cambiar el resultado: el cacao está saturado en el país y en Guayas, pero no en
+Santo Domingo (−0,8 % de superficie); el maíz duro es "media" en el país y "saturado" en Guayas (+27,1 %).
+
+- **Superficie y rendimiento:** INEC, ESPAC 2024 y 2025, por provincia, de la base histórica que publica el
+  MAG-SIPA (`superficie-produccion.xlsx`). Se comprobó que sus totales nacionales de los 15 cultivos y
+  varios valores por provincia son iguales a los tabulados oficiales de la ESPAC (`Tabulados_csv.zip`).
+- **Precio:** MAG-SIPA, precio mensual al productor por provincia (`precios-productor-ponderado.xlsx`).
+  Se compara el promedio de 2024 con el de 2025 usando solo los meses (y provincias) que tienen precio en
+  los dos años. Un producto por cultivo (por ejemplo cacao CCN51 almendra seca, papa superchola).
+- **No se escribe la fila** (la app dice "sin datos") si hay menos de 6 meses con precio en los dos años o
+  si la provincia tiene menos de 500 ha del cultivo. Los dos umbrales los eligió el equipo.
+- **Sin datos:** haba (solo 5 meses con precio, y en una provincia) y quinua (sin precios en 2024–2025).
+- La app muestra además cuánto rinde el cultivo en toneladas por hectárea y quintales por cuadra, ahora
+  con el dato de la provincia cuando existe. Cada fila guarda los números originales en la columna `notas`.
+- **Cambio respecto a la primera versión (6 cultivos):** antes el precio comparaba solo diciembre de 2024
+  con diciembre de 2025 (boletín del SIPA). Ahora compara los dos años completos, igual que la superficie.
+  Por eso el cacao pasó de −43,6 % a −13,2 % (sigue saturado) y la palma de −10,4 % a +7,5 % (pasó de
+  "media" a "alta": el precio subió en el promedio del año, aunque bajó al final de 2025).
+- **Límites:** el precio nacional es un promedio simple entre provincias, no el ponderado oficial; la ESPAC
+  es una encuesta y el dato de una provincia tiene más error que el nacional; la ESPAC no separa café
+  robusta de arábigo; para el banano se usa el precio "spot"; maíz suave y haba usan solo una de sus dos
+  formas (seco y tierna). Hay precios de 2026 (hasta octubre) que no se usan porque aún no hay ESPAC 2026.
+- Entre cultivos empatados en aptitud va primero el de mejor mercado, y el "saturado" va al final.
+
+**FAO EcoCrop** (`tablas/ecocrop_cultivos.csv`): rangos óptimos y absolutos de temperatura, lluvia y pH,
+altitud máxima y ciclo de los 15 cultivos, copiados de la ficha oficial de cada uno
+(`ecocrop.apps.fao.org`, licencia CC BY 4.0). **Todavía no se usan en el puntaje.** Una simulación mostró:
+- En Santo Domingo los empates en 100 bajan de 8 a 3 (cacao, palma, piña), lo que mejora el resultado.
+- Pero EcoCrop es mundial: sin un límite de altura propio del Ecuador pone haba y maíz suave con 100 en
+  Daule, y baja la papa a 71 a 3.000 m y a 45 a 3.500 m. Por eso no se adoptó sin acuerdo del equipo.
 
 ### El radar a la vista en la app (14 nov)
 - **Gráfico por terreno:** en las zonas detalladas, debajo de los datos del radar, hay un desplegable
@@ -335,7 +416,7 @@ comandos, usando `daule` como nombre de zona.
 ### Pendientes por rol
 - **Cultivos:** `tablas/requisitos_cultivos.csv` tiene valores **preliminares** (aproximados). Verificar cada uno con FAO EcoCrop / INIAP y quitar la palabra PRELIMINAR de la columna `notas`.
   El catálogo del equipo trae el **suelo** (pH, textura, drenaje) pero no la altura, la temperatura ni la lluvia que usa el puntaje. Para poder recomendar los cultivos nuevos del catálogo (fréjol, arveja, lenteja, chocho, trigo, cebada, amaranto, tomate, soya) falta sacar esos tres rangos de las mismas fuentes y agregarlos a `requisitos_cultivos.csv`. Rosa, clavel, aguacate, mora y uvilla todavía no tienen ningún dato.
-- **Mercado:** llenar `tablas/mercado.csv` (una fila por cultivo y provincia, o `nacional`): `var_superficie_pct` (ESPAC) y `var_precio_pct` (SIPA).
+- **Mercado:** `tablas/mercado.csv` ya tiene 13 cultivos a nivel nacional y 32 filas por provincia. Faltan haba y quinua (el SIPA no tiene precios suficientes) y los cultivos nuevos del catálogo.
 - **Radar:** la segunda zona ya está (Daule, ver arriba). Falta calibrar el umbral de agua y buscar fechas de época lluviosa. Cada archivo GCOV pesa ~7 GB: no descargar, usar la lectura remota.
 - **Programación:** textos en inglés para la entrega y publicar la app (cuando estén unidas la Costa y la Sierra). El gráfico del radar y la capa sobre el mapa ya están.
 

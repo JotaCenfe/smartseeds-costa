@@ -27,10 +27,12 @@ from src.clima_relieve import cargar_celdas, celda_mas_cercana, clima_power, rut
 from src.config import (CAPITALES, ZONAS, en_ecuador, forma_rejilla, provincia_sugerida,  # noqa: E402
                         zona_de_punto)
 from src.nisar import cargar_series, ruta_serie, serie_del_terreno  # noqa: E402
+from src.cobertura import CLASES, composicion, es_cultivable  # noqa: E402
 from src.mercado import ETIQUETAS  # noqa: E402
 from src.aptitud import AGUA_VISIBLE  # noqa: E402
 from src.recomendar import PUNTAJE_MINIMO, empatados, evaluar_todos, reparto_mejor_cultivo  # noqa: E402
-from src.terreno import area_texto, celda_promedio, celdas_del_terreno, vertices_de_geojson  # noqa: E402
+from src.terreno import (area_texto, celda_promedio, celdas_del_terreno, media_con_peso,  # noqa: E402
+                         vertices_de_geojson)
 from src.terreno import centro as centro_terreno  # noqa: E402  (aquí `centro` es el centro del mapa)
 
 st.set_page_config(page_title="SmartSeeds", page_icon="🌱", layout="wide")
@@ -40,15 +42,36 @@ ICONO_MERCADO = {"alta": "🟢", "media": "🟡", "saturado": "🔴", "sin_datos
 MODO_PUNTO, MODO_DIBUJO = "📍 Tocar un punto", "✏️ Dibujar mi terreno"
 RIEGO_NO, RIEGO_SI = "No, solo lluvia", "Sí, tengo riego"
 
+# Fondos del mapa. El primero es el que se ve al abrir; se cambian con el cuadro de la
+# esquina superior derecha del mapa.
+FONDO_CROQUIS = "Croquis"
+FONDO_FOTO = "Foto satelital"
+FONDO_NASA = "NASA 31 oct (óptico)"
+URL_FOTO = ("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/"
+            "tile/{z}/{y}/{x}")
+CREDITO_FOTO = "Imágenes &copy; Esri, Maxar, Earthstar Geographics y la comunidad GIS"
+# Imagen diaria del satélite Suomi NPP (sensor VIIRS) servida por NASA GIBS. Es la fecha de
+# la última pasada de NISAR sobre Daule: sirve para comparar lo que ve un satélite óptico
+# (nubes) con lo que ve el radar. Su detalle máximo es de ~250 m (nivel 9).
+URL_NASA = ("https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/"
+            "VIIRS_SNPP_CorrectedReflectance_TrueColor/default/2026-10-31/"
+            "GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg")
+CREDITO_NASA = "NASA EOSDIS GIBS · VIIRS (Suomi NPP)"
+
 # Capas del radar que se pueden pintar sobre el mapa: nombre -> columna de la tabla por celda.
 # Cada capa usa UN solo color, de claro (poco) a oscuro (mucho).
-CAPAS_RADAR = {"Nada": None, "Agua (dónde se encharca)": "encharcamiento",
+CAPAS_RADAR = {"Nada": None, "Tipo de terreno (modelo del radar)": "cobertura",
+               "Agua (dónde se encharca)": "encharcamiento",
                "Vegetación": "vegetacion", "Humedad del suelo": "humedad"}
+# Un color por tipo de terreno, siempre el mismo y en este orden (paleta de categorías).
+COLOR_TIPO = {"agua": (0x2A, 0x78, 0xD6), "construcciones": (0xEB, 0x68, 0x34),
+              "inundable": (0x1B, 0xAF, 0x7A), "cultivo_activo": (0xED, 0xA1, 0x00),
+              "vegetacion_baja": (0xE8, 0x7B, 0xA4), "vegetacion_densa": (0x00, 0x83, 0x00)}
 RAMPA_AZUL = ((0x86, 0xB6, 0xEF), (0x0D, 0x36, 0x6B))
 RAMPA_VERDE = ((0xC8, 0xE6, 0xC0), (0x00, 0x63, 0x00))
 RAMPAS = {"encharcamiento": RAMPA_AZUL, "humedad": RAMPA_AZUL, "vegetacion": RAMPA_VERDE}
 GRIS_SIN_RADAR = (137, 135, 129, 110)     # celdas que el radar no cubre
-OPACIDAD_CAPA = 200                       # de 0 (invisible) a 255 (tapa el mapa)
+OPACIDAD_CAPA = 170                       # de 0 (invisible) a 255 (tapa el mapa)
 AGUA_MUCHA = 0.5                          # agua en la mitad de las pasadas = azul más oscuro
 COLOR_LINEA = {"light": "#2a78d6", "dark": "#3987e5"}
 
@@ -126,8 +149,15 @@ def imagen_capa(clave_zona: str, columna: str, modificado: float) -> np.ndarray 
     if tabla is None or columna not in tabla:
         return None
     filas, columnas, _ = forma_rejilla(ZONAS[clave_zona]["recuadro"])
-    valor = tabla[columna].to_numpy(dtype="float64").reshape(filas, columnas)
     sin_radar = tabla["vegetacion"].isna().to_numpy().reshape(filas, columnas)
+    if columna == "cobertura":                # categorías: un color fijo por tipo de terreno
+        tipo = tabla[columna].to_numpy(dtype=object).reshape(filas, columnas)
+        imagen = np.zeros((filas, columnas, 4), dtype="uint8")
+        for clase, color in COLOR_TIPO.items():
+            imagen[tipo == clase] = (*color, OPACIDAD_CAPA)
+        imagen[sin_radar] = GRIS_SIN_RADAR
+        return imagen
+    valor = tabla[columna].to_numpy(dtype="float64").reshape(filas, columnas)
     if columna == "encharcamiento":           # solo se pinta donde hubo agua
         visible, tono = valor >= AGUA_VISIBLE, np.clip(valor / AGUA_MUCHA, 0, 1)
     else:
@@ -143,7 +173,17 @@ def imagen_capa(clave_zona: str, columna: str, modificado: float) -> np.ndarray 
 
 
 def leyenda_capa(columna: str) -> str:
-    """Barrita de color con "poco" y "mucho" para explicar la capa pintada en el mapa."""
+    """Explica los colores de la capa pintada en el mapa (barrita o lista de categorías)."""
+    if columna == "cobertura":
+        cuadros = "".join(
+            f'<span style="display:inline-flex;align-items:center;gap:5px;margin-right:12px">'
+            f'<span style="width:12px;height:12px;border-radius:3px;'
+            f'background:rgb{COLOR_TIPO[clase]}"></span>{CLASES[clase][0]}</span>'
+            for clase in COLOR_TIPO)
+        return (f'<div style="font-size:0.85rem;line-height:1.9">{cuadros}'
+                f'<span style="display:inline-flex;align-items:center;gap:5px">'
+                f'<span style="width:12px;height:12px;border-radius:3px;'
+                f'background:rgb(137,135,129)"></span>sin datos del radar</span></div>')
     claro, oscuro = ("#%02x%02x%02x" % c for c in RAMPAS[columna])
     return (f'<div style="display:flex;align-items:center;gap:8px;font-size:0.85rem">'
             f'<span>poco</span><div style="flex:1;max-width:220px;height:10px;border-radius:4px;'
@@ -154,11 +194,14 @@ def leyenda_capa(columna: str) -> str:
 
 
 def datos_del_terreno(lat: float, lon: float, contorno=None):
-    """Devuelve (celda, clima, clave_zona, celdas_del_contorno).
+    """Devuelve (celda, clima, clave_zona, celdas_del_contorno, tipos_de_terreno).
 
     La celda sigue el formato acordado. Si se dibujó un contorno dentro de una zona
-    detallada, la celda es el PROMEDIO de las celdas que caen dentro del terreno y
+    detallada, la celda es el PROMEDIO de las celdas que el terreno toca y
     `celdas_del_contorno` es la tabla con esas celdas (None en los demás casos).
+    Las celdas que el modelo del radar ve como construcciones o agua permanente no
+    entran en el promedio (salvo que todo el terreno sea así).
+    `tipos_de_terreno` dice de qué está hecho el terreno según ese modelo (o None).
     """
     c = clima(round(lat, 2), round(lon, 2))
     clave = zona_de_punto(lat, lon)
@@ -166,12 +209,16 @@ def datos_del_terreno(lat: float, lon: float, contorno=None):
         tabla = celdas(clave, ruta_celdas(clave).stat().st_mtime)
         if contorno:
             dentro = celdas_del_terreno(tabla, contorno)
-            return celda_promedio(dentro, contorno), c, clave, dentro
-        return celda_mas_cercana(tabla, lat, lon), c, clave, None
+            tipos = composicion(dentro)
+            if "cobertura" in dentro and es_cultivable(dentro["cobertura"]).any():
+                dentro = dentro[es_cultivable(dentro["cobertura"])]
+            return celda_promedio(dentro, contorno), c, clave, dentro, tipos
+        celda = celda_mas_cercana(tabla, lat, lon)
+        return celda, c, clave, None, composicion(pd.DataFrame([celda]))
     celda = {"lat": lat, "lon": lon, "altura": c["altura_power"], "pendiente": None,
              "temp": c["temp"], "lluvia": c["lluvia"],
              "humedad": None, "encharcamiento": None, "vegetacion": None}
-    return celda, c, None, None
+    return celda, c, None, None, None
 
 
 def tiene(valor) -> bool:
@@ -217,7 +264,14 @@ with col_mapa:
              "entre junio y octubre de 2026.")]
     if capa:
         st.markdown(leyenda_capa(capa), unsafe_allow_html=True)
-    mapa = folium.Map(location=centro, zoom_start=zoom, control_scale=True)
+    mapa = folium.Map(location=centro, zoom_start=zoom, control_scale=True, tiles=None,
+                      max_zoom=19)
+    folium.TileLayer("OpenStreetMap", name=FONDO_CROQUIS, max_zoom=19).add_to(mapa)
+    folium.TileLayer(URL_FOTO, attr=CREDITO_FOTO, name=FONDO_FOTO, max_native_zoom=17,
+                     max_zoom=19, show=False).add_to(mapa)
+    folium.TileLayer(URL_NASA, attr=CREDITO_NASA, name=FONDO_NASA, max_native_zoom=9,
+                     max_zoom=19, show=False).add_to(mapa)
+    folium.LayerControl(collapsed=False, position="topright").add_to(mapa)
     for clave, z in ZONAS.items():
         lon_min, lat_min, lon_max, lat_max = z["recuadro"]
         if capa and ruta_celdas(clave).exists():
@@ -225,22 +279,28 @@ with col_mapa:
             if imagen is not None:
                 folium.raster_layers.ImageOverlay(
                     imagen, bounds=[[lat_min, lon_min], [lat_max, lon_max]], origin="upper",
-                    pixelated=True, interactive=False).add_to(mapa)
+                    pixelated=True, interactive=False, control=False).add_to(mapa)
         folium.Rectangle([(lat_min, lon_min), (lat_max, lon_max)], color="#2e7d32", weight=2,
                          fill=True, fill_opacity=0.05, tooltip=f"Zona detallada: {z['nombre']}",
                          interactive=False).add_to(mapa)
     punto, contorno = None, None
 
     if modo == MODO_DIBUJO:
-        # Herramienta de dibujo: solo polígono (terreno irregular) y rectángulo
-        st.caption("Acerca el mapa a tu terreno, toca el botón ⬟ de la izquierda y marca cada "
-                   "esquina. Para cerrar, toca otra vez la primera esquina.")
+        # Herramienta de dibujo: solo polígono, con todas las esquinas que haga falta
+        st.caption("1. Acerca el mapa a tu terreno (con la **foto satelital** se ven mejor los "
+                   "linderos).  \n"
+                   "2. Toca el botón ⬟ y marca el borde punto por punto. Puedes poner todos "
+                   "los puntos que necesites para seguir curvas y esquinas.  \n"
+                   "3. Para cerrar, toca otra vez el primer punto.  \n"
+                   "4. ¿Quedó mal un punto? Toca ✎, arrástralo a su lugar y toca **Guardar**.")
         TextosDibujo().add_to(mapa)         # antes de Draw: así los botones nacen en español
         Draw(draw_options={"polyline": False, "circle": False, "marker": False,
-                           "circlemarker": False, "rectangle": True,
+                           "circlemarker": False, "rectangle": False,
                            "polygon": {"allowIntersection": False, "showArea": False,
                                        "shapeOptions": {"color": "#e65100"}}},
-             edit_options={"edit": True, "remove": True}).add_to(mapa)
+             # Ojo: NO pasar {"edit": True}. Con eso el botón de corregir se activa pero no
+             # aparecen las esquinas para arrastrar (falla interna de Leaflet.draw 1.0).
+             edit_options={"poly": {"allowIntersection": False}}).add_to(mapa)
         salida = st_folium(mapa, height=560, use_container_width=True, center=centro, zoom=zoom,
                            returned_objects=["all_drawings"], key="mapa_dibujo")
         dibujos = [v for v in map(vertices_de_geojson, (salida or {}).get("all_drawings") or [])
@@ -286,7 +346,7 @@ with col_resultado:
         st.stop()
 
     try:
-        celda, c, clave_zona, celdas_contorno = datos_del_terreno(lat, lon, contorno)
+        celda, c, clave_zona, celdas_contorno, tipos = datos_del_terreno(lat, lon, contorno)
     except Exception as error:  # noqa: BLE001
         st.error(f"No se pudo consultar el clima de NASA POWER. Revisa tu internet.\n\n{error}")
         st.stop()
@@ -296,11 +356,13 @@ with col_resultado:
         st.caption(f"Terreno dibujado · centro en latitud {lat:.4f}, longitud {lon:.4f}")
         st.metric("Tamaño de tu terreno", area_texto(contorno))
         if celdas_contorno is not None and len(celdas_contorno) > 1:
-            st.caption(f"Se promediaron {len(celdas_contorno)} cuadros del mapa de ~250 m "
-                       "que caen dentro de tu terreno.")
+            st.caption(f"Tu terreno toca {len(celdas_contorno)} cuadros de datos de ~250 m. Cada "
+                       "cuadro cuenta según la parte que tu terreno ocupa de él, así el "
+                       "resultado sigue la forma que dibujaste.")
         elif celdas_contorno is not None:
-            st.caption("Tu terreno es más pequeño que un cuadro del mapa (~250 m, unas 6 ha): "
-                       "se usan los datos del cuadro donde está.")
+            st.caption("Tu terreno cabe dentro de un solo cuadro de datos (~250 m, unas 6 ha): "
+                       "se usan los datos de ese cuadro. Los datos del radar no tienen más "
+                       "detalle que eso.")
     else:
         st.caption(f"Latitud {lat:.4f}, longitud {lon:.4f}")
     if clave_zona:
@@ -329,15 +391,36 @@ with col_resultado:
             n3.metric("Humedad", f"{celda['humedad']:.0%}" if tiene(celda.get("humedad")) else "—",
                       help="Humedad del suelo (producto SME2 de NISAR): 100 % = suelo saturado")
             if celdas_contorno is not None and len(celdas_contorno) > 1:
-                con_agua = (celdas_contorno["encharcamiento"] >= AGUA_VISIBLE).mean()
+                con_agua = media_con_peso(
+                    (celdas_contorno["encharcamiento"] >= AGUA_VISIBLE).astype(float),
+                    celdas_contorno["peso"]) or 0.0
                 st.caption(f"El radar vio agua acumulada en el {con_agua:.0%} de tu terreno "
                            "en alguna de sus pasadas.")
+            # Tipo de terreno según el modelo entrenado con las pasadas del radar
+            if tipos:
+                st.markdown("**Qué hay en tu terreno, según el radar**")
+                for t in tipos:
+                    parte = f"{t['fraccion']:.0%} · " if len(tipos) > 1 else ""
+                    st.markdown(f"- {parte}**{t['nombre']}**. {t['explicacion']}")
+                fuera = sum(t["fraccion"] for t in tipos if not t["cultivable"])
+                if fuera >= 0.995:
+                    st.warning("El radar ve este lugar como zona construida o agua, no como "
+                               "terreno de cultivo. Toma la recomendación solo como referencia "
+                               "o marca otro lugar.")
+                elif fuera > 0:
+                    st.caption(f"El {fuera:.0%} que el radar ve como zona construida o agua "
+                               "no entra en el análisis de tu terreno.")
+                st.caption("Lo calcula un modelo automático que aprendió de las pasadas del "
+                           "radar entre junio y octubre de 2026. No se comprobó en el campo y "
+                           "no distingue qué cultivo es.")
+
             # Serie del radar: lo que vio en cada pasada sobre este terreno
             numeros = (celdas_contorno["celda"].tolist() if celdas_contorno is not None
                        else [int(celda["celda"])])
             series = (series_radar(clave_zona, ruta_serie(clave_zona).stat().st_mtime)
                       if ruta_serie(clave_zona).exists() else None)
-            serie = serie_del_terreno(series, numeros) if series else None
+            pesos = celdas_contorno["peso"].tolist() if celdas_contorno is not None else None
+            serie = serie_del_terreno(series, numeros, pesos) if series else None
             if serie is not None:
                 with st.expander("📈 Ver lo que vio el radar en cada pasada"):
                     tema = getattr(getattr(st.context, "theme", None), "type", None) or "light"
@@ -385,6 +468,8 @@ with col_resultado:
             st.progress(min(1.0, cultivo["puntaje"] / 100))
             st.markdown(f"{ICONO_MERCADO[cultivo['mercado']]} **{ETIQUETAS[cultivo['mercado']]}** — "
                         f"{cultivo['mercado_texto']}")
+            if cultivo.get("rendimiento_texto"):
+                st.markdown(f"📦 {cultivo['rendimiento_texto']}")
             if cultivo.get("tiempo_texto"):
                 st.markdown(f"⏱️ {cultivo['tiempo_texto']}")
             with st.expander("¿Por qué?", expanded=(i == 1)):
@@ -392,6 +477,9 @@ with col_resultado:
                     icono = "•" if f["nota"] is None else "✅" if f["nota"] >= 1 else \
                             "⚠️" if f["nota"] > 0 else "❌"
                     st.markdown(f"{icono} {f['texto']}")
+                if cultivo.get("mercado_fuente"):
+                    st.caption(f"Mercado y rendimiento: se compara 2024 con 2025, con datos de tu provincia "
+                               f"si los hay y, si no, del país. Fuente: {cultivo['mercado_fuente']}")
                 if cultivo.get("suelo"):
                     st.markdown(f"🧪 **Suelo que prefiere:** {cultivo['suelo']['texto']}")
                     st.caption(f"Dato de referencia: la app todavía no mide el suelo de tu terreno, "

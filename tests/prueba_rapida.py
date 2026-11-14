@@ -14,11 +14,12 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src import nisar, terreno  # noqa: E402
+from src import cobertura, nisar, terreno  # noqa: E402
 from src.aptitud import aptitud, cargar_requisitos  # noqa: E402
 from src.clima_relieve import corregir_temp_por_altura, nombre_tile, pendiente_grados  # noqa: E402
 from src.config import provincia_sugerida, zona_de_punto  # noqa: E402
-from src.mercado import clasificar, mercado  # noqa: E402
+from src.mercado import clasificar, mercado, mercado_detalle  # noqa: E402
+from src.preparar_mercado import variacion_precio  # noqa: E402
 from src.recomendar import (empatados, evaluar_todos, recomendar, reparto_mejor_cultivo,  # noqa: E402
                             suelo_detalle, tiempo_texto)
 
@@ -70,8 +71,10 @@ assert aptitud(arrozal, req.loc["arroz"].to_dict()) == 100
 # --- Empates: el orden depende de lo que prefiere el agricultor, no de la tabla ---
 pronto = evaluar_todos(costa, "Guayas", preferencia="pronto")
 largo = evaluar_todos(costa, "Guayas", preferencia="largo")
-assert [c["cultivo"] for c in pronto[:3]] == ["maiz_duro", "arroz", "maracuya"]      # 4, 4 y 8 meses
-assert [c["cultivo"] for c in largo[:3]] == ["banano", "platano", "cafe_robusta"]    # permanentes primero
+# Entre empatados va primero el de mejor mercado: maracuyá y plátano ("alta"), luego los de "media"
+assert [c["cultivo"] for c in pronto[:3]] == ["maracuya", "platano", "arroz"]        # el más rápido primero
+assert [c["cultivo"] for c in largo[:3]] == ["platano", "maracuya", "banano"]        # permanente primero
+assert pronto[-1]["cultivo"] != "cacao" and [c["cultivo"] for c in pronto if c["puntaje"] == 100][-1] == "cacao"  # saturado: último de los empatados
 assert {c["cultivo"]: c["puntaje"] for c in pronto} == {c["cultivo"]: c["puntaje"] for c in largo}
 assert {"cacao", "banano"} <= {c["cultivo"] for c in empatados(pronto)}              # empatados fuera del top 3
 assert "4 meses" in tiempo_texto(req.loc["maiz_duro"].to_dict())
@@ -89,6 +92,28 @@ assert clasificar(15, -3) == "saturado"
 assert clasificar(2, 8) == "alta"
 assert clasificar(2, 1) == "media"
 assert mercado("cultivo_que_no_existe", "Guayas") == "sin_datos"
+# Datos reales 2024-2025 (ESPAC y SIPA), por provincia: se sembró más cacao y papa y el precio bajó
+assert mercado("cacao", "Guayas") == "saturado" and mercado("papa", "Cotopaxi") == "saturado"
+assert mercado("arroz", "Guayas") == "media" and mercado("banano", "Los Ríos") == "media"
+det = mercado_detalle("maiz_duro", "Guayas")
+assert det["nivel"] == "saturado" and "En Guayas" in det["texto"]
+assert "quintales por cuadra" in det["rendimiento"] and "INEC" in det["fuente"]
+# La provincia manda sobre el país: el cacao está saturado en el país pero no en Santo Domingo
+assert mercado("cacao", "Santo Domingo de los Tsáchilas") == "media" and mercado("cacao", "Azuay") == "saturado"
+assert mercado("cacao", "santo domingo de los tsachilas") == "media"   # sin tildes ni mayúsculas también
+# Sin fila de la provincia se usa la nacional, y el texto lo dice
+assert "En el país" in mercado_detalle("platano", "Guayas")["texto"]
+# Haba y quinua: el SIPA no tiene precios suficientes -> sin datos, no se inventa
+assert mercado("haba", "Cotopaxi") == mercado("quinua", "Cotopaxi") == "sin_datos"
+assert mercado_detalle("haba", "Cotopaxi")["rendimiento"] is None
+
+# Cómo se arma la tabla: el precio solo se compara con los meses que están en los dos años
+meses = [(2024, m, 1.0) for m in range(1, 13)] + [(2025, m, 1.5) for m in range(1, 7)]
+precios = pd.DataFrame([{"anio": a, "mes": m, "prov": "GUAYAS", "producto": "yuca", "usd_kg": v} for a, m, v in meses])
+cambio = variacion_precio(precios, "Yuca", "GUAYAS")
+assert cambio["meses"] == 6 and abs(cambio["var"] - 50) < 1e-6
+assert variacion_precio(precios[precios["mes"] != 6], "Yuca", "GUAYAS") is None   # 5 meses: no alcanza
+assert variacion_precio(precios, "Yuca", "MANABI") is None
 
 # --- Clima y relieve --------------------------------------------------------
 assert abs(corregir_temp_por_altura(24.0, 500, 1500) - 17.5) < 1e-6   # 1000 m más alto = 6,5 °C menos
@@ -124,6 +149,18 @@ adentro = terreno.celdas_del_terreno(tabla_inv, cuadrado)
 assert adentro["celda"].tolist() == [0, 1]                           # la celda lejana queda fuera
 prom = terreno.celda_promedio(adentro, cuadrado)
 assert prom["altura"] == 420 and prom["encharcamiento"] == 0.25 and prom["humedad"] is None
+assert adentro["peso"].tolist() == [1.0, 1.0]                        # las dos celdas quedan enteras dentro
+# Un terreno que cubre solo la mitad oeste de la celda 0 y una esquina de la celda 1
+paso = 8 / 3600
+medio = [(-79.195 - paso / 2, -0.005 - paso / 2), (-79.195, -0.005 - paso / 2),
+         (-79.195, -0.005 + paso / 2), (-79.195 - paso / 2, -0.005 + paso / 2)]
+mitad = terreno.celdas_del_terreno(tabla_inv, medio)
+assert mitad["celda"].tolist() == [0] and abs(mitad["peso"].iloc[0] - 0.5) < 1e-9
+dos = terreno.celdas_del_terreno(tabla_inv, [(-79.1965, -0.0045), (-79.1935, -0.0045),
+                                             (-79.1935, -0.0065), (-79.1965, -0.0065)])
+assert dos["celda"].tolist() == [0, 1] and dos["peso"].iloc[0] > dos["peso"].iloc[1] > 0
+prom2 = terreno.celda_promedio(dos, medio)
+assert 400 < prom2["altura"] < 420                                   # pesa más la celda más ocupada (400 m)
 chico = [(-79.3001, -0.4001), (-79.3000, -0.4001), (-79.3000, -0.4000)]   # más pequeño que una celda
 assert len(terreno.celdas_del_terreno(tabla_inv, chico)) == 1        # usa la celda más cercana
 partes = reparto_mejor_cultivo(adentro)
@@ -159,4 +196,31 @@ assert st2["agua"].tolist() == [0.5, 0.5, 0, 0]
 vacio = dict(series, hh=np.full_like(hh, np.nan), hv=np.full_like(hv, np.nan))
 assert nisar.serie_del_terreno(vacio, [0]) is None  # fuera de la franja del radar
 
-print("TODO BIEN: aptitud, riego, empates, suelo, mercado, clima/relieve, zonas, terreno dibujado y capas NISAR.")
+# --- Tipo de terreno según el radar (modelo de agrupamiento) -----------------
+# Reglas que le ponen nombre a cada grupo, con valores parecidos a los que salieron al entrenar
+base = {"hh_media": -8, "hv_media": -16, "hh_cambio": 0.6, "hv_cambio": 0.5, "hh_min": -9,
+        "agua": 0.0, "hh_menos_hv": 8}
+assert cobertura.nombrar(base) == "vegetacion_baja"
+assert cobertura.nombrar(dict(base, hv_media=-11)) == "vegetacion_densa"
+assert cobertura.nombrar(dict(base, hh_cambio=2.9)) == "cultivo_activo"
+assert cobertura.nombrar(dict(base, hh_media=0, hh_menos_hv=10.6)) == "construcciones"
+assert cobertura.nombrar(dict(base, agua=0.27)) == "inundable"
+assert cobertura.nombrar(dict(base, agua=0.8)) == "agua"
+# Rasgos de una serie inventada: la celda (0,0) tiene agua en 2 de 4 fechas y cambia mucho
+ras = cobertura.rasgos_de_serie(hh, hv, agua)
+assert len(ras) == 9 and ras["agua"].iloc[0] == 0.5 and ras["hh_cambio"].iloc[0] > 5
+assert abs(ras["hh_media"].iloc[4] + 10) < 1e-4 and ras["hh_cambio"].iloc[4] < 1e-4
+# Clasificar con un modelo de dos grupos (sin scikit-learn): el más parecido gana
+modelo = {"media": np.zeros(7), "escala": np.ones(7), "nombres": ["vegetacion_baja", "inundable"],
+          "centros": np.array([ras.iloc[4].to_numpy(), ras.iloc[0].to_numpy()])}
+clases = cobertura.clasificar(ras, modelo)
+assert clases[0] == "inundable" and clases[4] == "vegetacion_baja"
+# De qué está hecho un terreno: pesa cada celda por lo que ocupa; lo construido no es cultivable
+mezcla = pd.DataFrame({"cobertura": ["cultivo_activo", "construcciones", None], "peso": [0.75, 0.25, 1.0]})
+comp = cobertura.composicion(mezcla)
+assert [(c["clase"], c["fraccion"], c["cultivable"]) for c in comp] ==     [("cultivo_activo", 0.75, True), ("construcciones", 0.25, False)]
+assert cobertura.es_cultivable(mezcla["cobertura"]).tolist() == [True, False, True]
+assert cobertura.composicion(pd.DataFrame({"altura": [1.0]})) is None
+
+print("TODO BIEN: aptitud, riego, empates, suelo, mercado, clima/relieve, zonas, terreno dibujado, "
+      "capas NISAR y tipo de terreno.")
