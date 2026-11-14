@@ -1,0 +1,444 @@
+cultivo_espac,cultivo,provincia,anio,superficie_ha,var_superficie_pct,rendimiento_t_ha,rendimiento_pais_t_ha,rendimiento_producto
+Cacao,cacao,Azuay,2025,7687,104.9,0.87,0.82,almendra seca
+Maíz Suave Seco,maiz_suave,Azuay,2025,5260,-16.5,0.95,1.37,grano seco
+Fréjol Seco,,Azuay,2025,3219,-18.8,0.4,0.78,grano seco
+Papa,papa,Azuay,2025,1886,88.2,4.97,14.35,tubérculo fresco
+Haba Seca,,Azuay,2025,990,146.7,0.32,0.69,grano seco
+Café,cafe_robusta,Azuay,2025,780,1403.2,0.48,0.24,grano oro
+Maíz Duro Seco,maiz_duro,Azuay,2025,603,-47.8,0.99,5.09,grano seco
+Caña De Azúcar Para Otros Usos,,Azuay,2025,591,-22.1,42.66,45.26,tallo fresco
+Banano,banano,Azuay,2025,448,-19.4,66.58,44.05,fruta fresca
+Fréjol Tierno,,Azuay,2025,378,-24.2,3.59,2.76,en vaina
+Arveja Tierna,,Azuay,2025,375,30.5,1.77,3.34,en vaina
+Maíz Suave Choclo,,Azuay,2025,325,-30.1,2.49,3.63,en choclo
+Haba Tierna,haba,Azuay,2025,276,-13.2,0.69,3.19,haba tierna en vaina
+Trigo,,Azuay,2025,156,79.6,0.65,2.15,grano seco
+Plátano,platano,Azuay,2025,95,,6.11,6.81,fruta fresca
+Tomate Riñón,,Azuay,2025,89,78.5,47.84,35.25,fruta fresca
+Orito,,Azuay,2025,84,38.0,8.18,6.84,fruta fresca
+Arveja Seca,,Azuay,2025,72,198.1,0.37,0.5,grano seco
+Maracuyá,maracuya,Azuay,2025,55,,,10.55,fruta fresca
+Aguacate,,Azuay,2025,39,-44.5,,4.34,fruta fresca
+Tomate De Árbol,tomate_de_arbol,Azuay,2025,35,-71.1,32.71,15.5,fruta fresca
+Yuca,yuca,Azuay,2025,21,103.4,3.64,5.87,raíz fresca
+Limón,,Azuay,2025,2,21.7,7.27,6.66,fruta fresca
+Maíz Suave Seco,maiz_suave,Bolívar,2025,14558,-18.4,1.57,1.37,grano seco
+Cacao,cacao,Bolívar,2025,12556,-38.6,0.98,0.82,almendra seca
+Fréjol Seco,,Bolívar,2025,6408,-10.7,0.92,0.78,grano seco
+Maíz Suave Choclo,,Bolívar,2025,4513,40.0,3.25,3.63,en choclo
+Naranja,,Bolívar,2025,3011,-59.5,11.07,11.67,fruta fresca
+Banano,banano,Bolívar,2025,2692,-50.5,7.33,44.05,fruta fresca
+Caña De Azúcar Para Otros Usos,,Bolívar,2025,2490,3.5,30.55,45.26,tallo fresco
+Papa,papa,Bolívar,2025,1011,77.5,5.4,14.35,tubérculo fresco
+Fréjol Tierno,,Bolívar,2025,823,609.4,2.13,2.76,en vaina
+Plátano,platano,Bolívar,2025,575,-67.5,5.35,6.81,fruta fresca
+Palma Africana,palma_aceitera,Bolívar,2025,537,-8.7,17.81,19.99,fruta fresca
+Arroz,arroz,Bolívar,2025,278,716.5,6.0,5.02,arroz en cáscara
+Trigo,,Bolívar,2025,269,-20.7,1.8,2.15,grano seco
+Orito,,Bolívar,2025,220,-67.5,7.77,6.84,fruta fresca
+Maíz Duro Seco,maiz_duro,Bolívar,2025,214,53.1,2.09,5.09,grano seco
+Cebada,,Bolívar,2025,164,-60.3,2.58,1.97,grano seco
+Yuca,yuca,Bolívar,2025,151,2265.1,4.12,5.87,raíz fresca
+Aguacate,,Bolívar,2025,125,286.8,,4.34,fruta fresca
+Haba Seca,,Bolívar,2025,122,-49.9,1.15,0.69,grano seco
+Tomate De Árbol,tomate_de_arbol,Bolívar,2025,121,67.3,9.7,15.5,fruta fresca
+Tomate Riñón,,Bolívar,2025,110,885.6,4.65,35.25,fruta fresca
+Arveja Seca,,Bolívar,2025,103,-74.0,0.47,0.5,grano seco
+Haba Tierna,haba,Bolívar,2025,43,-24.7,1.81,3.19,haba tierna en vaina
+Maíz Duro Choclo,,Bolívar,2025,33,-85.4,0.52,3.86,en choclo
+Arveja Tierna,,Bolívar,2025,20,-89.2,1.4,3.34,en vaina
+Papa,papa,Carchi,2025,4019,-14.2,26.9,14.35,tubérculo fresco
+Aguacate,,Carchi,2025,2620,2.2,4.26,4.34,fruta fresca
+Arveja Tierna,,Carchi,2025,1314,32.7,5.02,3.34,en vaina
+Cebada,,Carchi,2025,1203,18.1,2.89,1.97,grano seco
+Trigo,,Carchi,2025,1171,-28.7,3.02,2.15,grano seco
+Maíz Duro Seco,maiz_duro,Carchi,2025,939,38.0,3.29,5.09,grano seco
+Limón,,Carchi,2025,770,-18.1,7.94,6.66,fruta fresca
+Arveja Seca,,Carchi,2025,708,167.7,0.53,0.5,grano seco
+Fréjol Tierno,,Carchi,2025,702,203.2,3.75,2.76,en vaina
+Haba Tierna,haba,Carchi,2025,534,-32.0,2.24,3.19,haba tierna en vaina
+Maíz Suave Choclo,,Carchi,2025,491,72.6,2.55,3.63,en choclo
+Fréjol Seco,,Carchi,2025,438,-70.9,0.95,0.78,grano seco
+Caña De Azúcar Para Azúcar,,Carchi,2025,274,-7.2,48.18,84.47,tallo fresco
+Plátano,platano,Carchi,2025,229,-35.1,5.12,6.81,fruta fresca
+Maíz Suave Seco,maiz_suave,Carchi,2025,201,-41.4,1.09,1.37,grano seco
+Cacao,cacao,Carchi,2025,191,683.3,0.25,0.82,almendra seca
+Maracuyá,maracuya,Carchi,2025,129,22.1,9.34,10.55,fruta fresca
+Café,cafe_robusta,Carchi,2025,84,-31.6,0.74,0.24,grano oro
+Caña De Azúcar Para Otros Usos,,Carchi,2025,74,-75.6,36.53,45.26,tallo fresco
+Mango,,Carchi,2025,66,-42.0,1.01,12.0,fruta fresca
+Yuca,yuca,Carchi,2025,60,-60.0,1.57,5.87,raíz fresca
+Naranja,,Carchi,2025,41,-50.9,3.02,11.67,fruta fresca
+Haba Seca,,Carchi,2025,26,-46.0,0.65,0.69,grano seco
+Tomate Riñón,,Carchi,2025,20,-13.7,47.02,35.25,fruta fresca
+Banano,banano,Carchi,2025,14,,2.49,44.05,fruta fresca
+Maíz Duro Choclo,,Carchi,2025,9,-80.1,2.91,3.86,en choclo
+Piña,pina,Carchi,2025,9,205.8,,68.18,fruta fresca
+Tomate De Árbol,tomate_de_arbol,Carchi,2025,8,,,15.5,fruta fresca
+Quinua,quinua,Carchi,2025,6,-96.5,0.82,1.21,grano seco
+Cacao,cacao,Cañar,2025,11065,35.7,0.98,0.82,almendra seca
+Caña De Azúcar Para Azúcar,,Cañar,2025,8708,-25.2,65.2,84.47,tallo fresco
+Banano,banano,Cañar,2025,7213,81.0,37.99,44.05,fruta fresca
+Maíz Suave Seco,maiz_suave,Cañar,2025,1987,-23.5,0.71,1.37,grano seco
+Fréjol Seco,,Cañar,2025,1376,109.1,0.26,0.78,grano seco
+Caña De Azúcar Para Otros Usos,,Cañar,2025,1334,,54.94,45.26,tallo fresco
+Papa,papa,Cañar,2025,398,-52.1,9.27,14.35,tubérculo fresco
+Maíz Suave Choclo,,Cañar,2025,252,147.0,0.92,3.63,en choclo
+Haba Tierna,haba,Cañar,2025,244,363.3,0.66,3.19,haba tierna en vaina
+Haba Seca,,Cañar,2025,147,22.5,0.25,0.69,grano seco
+Plátano,platano,Cañar,2025,71,172.2,3.64,6.81,fruta fresca
+Maíz Duro Seco,maiz_duro,Cañar,2025,56,-41.8,0.59,5.09,grano seco
+Cebada,,Cañar,2025,44,18.9,1.09,1.97,grano seco
+Arveja Seca,,Cañar,2025,35,52.8,0.26,0.5,grano seco
+Fréjol Tierno,,Cañar,2025,29,-68.3,0.89,2.76,en vaina
+Arveja Tierna,,Cañar,2025,11,-90.7,0.47,3.34,en vaina
+Orito,,Cañar,2025,3,0.0,4.09,6.84,fruta fresca
+Café,cafe_robusta,Cañar,2025,1,0.0,0.27,0.24,grano oro
+Papa,papa,Chimborazo,2025,3326,6.8,7.73,14.35,tubérculo fresco
+Maíz Suave Seco,maiz_suave,Chimborazo,2025,2939,-15.7,1.21,1.37,grano seco
+Fréjol Seco,,Chimborazo,2025,1422,-31.4,0.79,0.78,grano seco
+Maíz Suave Choclo,,Chimborazo,2025,1263,-8.7,4.69,3.63,en choclo
+Haba Tierna,haba,Chimborazo,2025,1258,51.8,4.07,3.19,haba tierna en vaina
+Fréjol Tierno,,Chimborazo,2025,1144,58.0,2.72,2.76,en vaina
+Cebada,,Chimborazo,2025,1066,-69.8,0.77,1.97,grano seco
+Caña De Azúcar Para Azúcar,,Chimborazo,2025,794,,74.66,84.47,tallo fresco
+Cebolla Blanca,,Chimborazo,2025,755,4.0,4.53,4.98,tallo fresco
+Cacao,cacao,Chimborazo,2025,676,-9.2,1.49,0.82,almendra seca
+Arveja Tierna,,Chimborazo,2025,630,-3.7,2.58,3.34,en vaina
+Orito,,Chimborazo,2025,572,-13.9,2.79,6.84,fruta fresca
+Aguacate,,Chimborazo,2025,414,-19.2,4.91,4.34,fruta fresca
+Tomate Riñón,,Chimborazo,2025,267,-32.8,57.4,35.25,fruta fresca
+Brócoli,,Chimborazo,2025,237,23.5,18.31,15.85,repollo
+Maíz Duro Seco,maiz_duro,Chimborazo,2025,218,-52.2,2.23,5.09,grano seco
+Café,cafe_robusta,Chimborazo,2025,199,195.5,0.27,0.24,grano oro
+Trigo,,Chimborazo,2025,102,-80.2,2.22,2.15,grano seco
+Haba Seca,,Chimborazo,2025,100,-72.4,0.84,0.69,grano seco
+Arveja Seca,,Chimborazo,2025,72,-48.8,0.35,0.5,grano seco
+Naranja,,Chimborazo,2025,67,,6.55,11.67,fruta fresca
+Quinua,quinua,Chimborazo,2025,49,-91.8,1.22,1.21,grano seco
+Limón,,Chimborazo,2025,36,,1.59,6.66,fruta fresca
+Tomate De Árbol,tomate_de_arbol,Chimborazo,2025,30,-78.0,22.35,15.5,fruta fresca
+Plátano,platano,Chimborazo,2025,29,460.0,3.71,6.81,fruta fresca
+Caña De Azúcar Para Otros Usos,,Chimborazo,2025,2,-99.3,22.5,45.26,tallo fresco
+Caña De Azúcar Para Otros Usos,,Cotopaxi,2025,8366,191.2,54.1,45.26,tallo fresco
+Cacao,cacao,Cotopaxi,2025,7294,-3.2,0.7,0.82,almendra seca
+Banano,banano,Cotopaxi,2025,6308,-12.0,30.92,44.05,fruta fresca
+Maíz Suave Seco,maiz_suave,Cotopaxi,2025,5078,-34.4,1.28,1.37,grano seco
+Brócoli,,Cotopaxi,2025,2974,-59.0,13.44,15.85,repollo
+Plátano,platano,Cotopaxi,2025,2963,52.2,7.61,6.81,fruta fresca
+Cebolla Blanca,,Cotopaxi,2025,2066,70.6,4.02,4.98,tallo fresco
+Palma Africana,palma_aceitera,Cotopaxi,2025,2020,88.8,20.9,19.99,fruta fresca
+Fréjol Seco,,Cotopaxi,2025,1915,70.0,0.99,0.78,grano seco
+Papa,papa,Cotopaxi,2025,1584,43.3,11.12,14.35,tubérculo fresco
+Café,cafe_robusta,Cotopaxi,2025,1328,640.8,0.27,0.24,grano oro
+Naranja,,Cotopaxi,2025,1277,570.0,5.12,11.67,fruta fresca
+Maíz Suave Choclo,,Cotopaxi,2025,1168,11.1,4.33,3.63,en choclo
+Orito,,Cotopaxi,2025,816,-55.6,2.32,6.84,fruta fresca
+Cebada,,Cotopaxi,2025,677,-14.1,1.79,1.97,grano seco
+Yuca,yuca,Cotopaxi,2025,453,3351.1,4.65,5.87,raíz fresca
+Maíz Duro Seco,maiz_duro,Cotopaxi,2025,423,92.2,1.16,5.09,grano seco
+Haba Tierna,haba,Cotopaxi,2025,374,88.0,3.79,3.19,haba tierna en vaina
+Tomate Riñón,,Cotopaxi,2025,329,3.5,43.65,35.25,fruta fresca
+Haba Seca,,Cotopaxi,2025,188,435.7,1.73,0.69,grano seco
+Arveja Tierna,,Cotopaxi,2025,64,169.6,1.8,3.34,en vaina
+Tomate De Árbol,tomate_de_arbol,Cotopaxi,2025,22,,,15.5,fruta fresca
+Fréjol Tierno,,Cotopaxi,2025,21,-5.7,3.93,2.76,en vaina
+Trigo,,Cotopaxi,2025,19,-36.2,0.91,2.15,grano seco
+Aguacate,,Cotopaxi,2025,7,-45.5,,4.34,fruta fresca
+Banano,banano,El Oro,2025,36595,7.7,44.47,44.05,fruta fresca
+Cacao,cacao,El Oro,2025,26388,8.9,0.99,0.82,almendra seca
+Arroz,arroz,El Oro,2025,2715,-26.0,5.02,5.02,arroz en cáscara
+Maíz Duro Seco,maiz_duro,El Oro,2025,1517,-55.9,4.09,5.09,grano seco
+Café,cafe_robusta,El Oro,2025,589,8.7,0.25,0.24,grano oro
+Plátano,platano,El Oro,2025,508,-62.2,4.98,6.81,fruta fresca
+Caña De Azúcar Para Otros Usos,,El Oro,2025,424,-51.6,70.76,45.26,tallo fresco
+Maíz Suave Seco,maiz_suave,El Oro,2025,290,-47.6,1.59,1.37,grano seco
+Palma Africana,palma_aceitera,El Oro,2025,258,-28.0,,19.99,fruta fresca
+Limón,,El Oro,2025,128,-91.1,2.3,6.66,fruta fresca
+Yuca,yuca,El Oro,2025,124,66.6,1.2,5.87,raíz fresca
+Fréjol Seco,,El Oro,2025,67,-59.6,0.63,0.78,grano seco
+Arveja Seca,,El Oro,2025,58,112.1,1.39,0.5,grano seco
+Haba Seca,,El Oro,2025,53,-28.1,0.46,0.69,grano seco
+Maíz Suave Choclo,,El Oro,2025,39,59.2,4.55,3.63,en choclo
+Naranja,,El Oro,2025,28,-91.2,21.59,11.67,fruta fresca
+Trigo,,El Oro,2025,27,182.4,2.03,2.15,grano seco
+Fréjol Tierno,,El Oro,2025,25,115.6,1.06,2.76,en vaina
+Haba Tierna,haba,El Oro,2025,23,7.5,0.82,3.19,haba tierna en vaina
+Cebada,,El Oro,2025,15,,2.27,1.97,grano seco
+Papa,papa,El Oro,2025,3,-96.4,22.73,14.35,tubérculo fresco
+Cacao,cacao,Esmeraldas,2025,124297,20.2,0.73,0.82,almendra seca
+Palma Africana,palma_aceitera,Esmeraldas,2025,76601,7.1,14.98,19.99,fruta fresca
+Maíz Duro Seco,maiz_duro,Esmeraldas,2025,8981,23.0,7.57,5.09,grano seco
+Plátano,platano,Esmeraldas,2025,7992,-8.5,5.29,6.81,fruta fresca
+Maracuyá,maracuya,Esmeraldas,2025,2840,-28.2,15.24,10.55,fruta fresca
+Palmito,,Esmeraldas,2025,970,-51.6,4.81,4.56,tallo fresco
+Maíz Duro Choclo,,Esmeraldas,2025,783,2512.3,7.32,3.86,en choclo
+Limón,,Esmeraldas,2025,555,-2.1,7.99,6.66,fruta fresca
+Café,cafe_robusta,Esmeraldas,2025,456,28.1,0.12,0.24,grano oro
+Naranja,,Esmeraldas,2025,250,58.3,4.84,11.67,fruta fresca
+Yuca,yuca,Esmeraldas,2025,214,691.2,2.75,5.87,raíz fresca
+Maíz Suave Seco,maiz_suave,Esmeraldas,2025,193,,4.09,1.37,grano seco
+Banano,banano,Esmeraldas,2025,137,0.5,16.68,44.05,fruta fresca
+Orito,,Esmeraldas,2025,30,-49.0,,6.84,fruta fresca
+Caña De Azúcar Para Otros Usos,,Esmeraldas,2025,24,-21.7,43.64,45.26,tallo fresco
+Haba Tierna,haba,Esmeraldas,2025,17,9.9,0.11,3.19,haba tierna en vaina
+Arroz,arroz,Guayas,2025,259676,-3.8,5.06,5.02,arroz en cáscara
+Cacao,cacao,Guayas,2025,104939,11.8,0.93,0.82,almendra seca
+Banano,banano,Guayas,2025,75858,40.9,45.93,44.05,fruta fresca
+Caña De Azúcar Para Azúcar,,Guayas,2025,62195,-12.0,83.54,84.47,tallo fresco
+Maíz Duro Seco,maiz_duro,Guayas,2025,45313,27.1,5.19,5.09,grano seco
+Mango,,Guayas,2025,33277,58.0,12.04,12.0,fruta fresca
+Palma Africana,palma_aceitera,Guayas,2025,11378,-20.2,30.01,19.99,fruta fresca
+Plátano,platano,Guayas,2025,10420,-49.2,9.21,6.81,fruta fresca
+Soya,,Guayas,2025,8128,7.5,1.2,1.42,grano seco
+Fréjol Tierno,,Guayas,2025,2759,3.8,2.92,2.76,en vaina
+Tabaco,,Guayas,2025,1988,114.4,1.21,1.36,hoja seca
+Piña,pina,Guayas,2025,876,-59.9,36.36,68.18,fruta fresca
+Maíz Duro Choclo,,Guayas,2025,552,98.0,1.98,3.86,en choclo
+Aguacate,,Guayas,2025,532,-79.1,0.39,4.34,fruta fresca
+Maní,,Guayas,2025,463,85.7,1.23,0.93,grano descascarado
+Maracuyá,maracuya,Guayas,2025,220,72.4,3.33,10.55,fruta fresca
+Yuca,yuca,Guayas,2025,115,,5.3,5.87,raíz fresca
+Caña De Azúcar Para Otros Usos,,Guayas,2025,110,,40.0,45.26,tallo fresco
+Limón,,Guayas,2025,49,-52.8,0.52,6.66,fruta fresca
+Tomate Riñón,,Guayas,2025,40,,,35.25,fruta fresca
+Fréjol Seco,,Guayas,2025,28,-24.6,1.82,0.78,grano seco
+Café,cafe_robusta,Guayas,2025,2,-95.3,0.38,0.24,grano oro
+Caña De Azúcar Para Azúcar,,Imbabura,2025,3691,26.5,129.41,84.47,tallo fresco
+Fréjol Seco,,Imbabura,2025,2719,-1.0,0.99,0.78,grano seco
+Maíz Suave Seco,maiz_suave,Imbabura,2025,2673,-24.3,0.95,1.37,grano seco
+Aguacate,,Imbabura,2025,2198,63.1,4.51,4.34,fruta fresca
+Plátano,platano,Imbabura,2025,1498,3.2,5.27,6.81,fruta fresca
+Fréjol Tierno,,Imbabura,2025,1452,-1.7,4.13,2.76,en vaina
+Caña De Azúcar Para Otros Usos,,Imbabura,2025,1409,-7.4,97.35,45.26,tallo fresco
+Maíz Duro Seco,maiz_duro,Imbabura,2025,1281,17.8,2.3,5.09,grano seco
+Maíz Suave Choclo,,Imbabura,2025,1149,-32.6,2.79,3.63,en choclo
+Cacao,cacao,Imbabura,2025,875,-0.2,0.97,0.82,almendra seca
+Palma Africana,palma_aceitera,Imbabura,2025,826,-35.5,12.66,19.99,fruta fresca
+Papa,papa,Imbabura,2025,778,-29.1,13.24,14.35,tubérculo fresco
+Arveja Tierna,,Imbabura,2025,597,25.3,1.7,3.34,en vaina
+Palmito,,Imbabura,2025,520,32.1,6.5,4.56,tallo fresco
+Café,cafe_robusta,Imbabura,2025,424,-23.5,0.23,0.24,grano oro
+Tomate Riñón,,Imbabura,2025,313,123.8,39.43,35.25,fruta fresca
+Haba Tierna,haba,Imbabura,2025,295,-27.3,1.5,3.19,haba tierna en vaina
+Tomate De Árbol,tomate_de_arbol,Imbabura,2025,248,-63.4,8.94,15.5,fruta fresca
+Arveja Seca,,Imbabura,2025,200,62.8,0.44,0.5,grano seco
+Trigo,,Imbabura,2025,195,-30.1,2.02,2.15,grano seco
+Mango,,Imbabura,2025,179,-11.8,7.95,12.0,fruta fresca
+Maíz Duro Choclo,,Imbabura,2025,161,344.1,9.93,3.86,en choclo
+Cebada,,Imbabura,2025,159,-72.4,1.25,1.97,grano seco
+Orito,,Imbabura,2025,126,14.0,2.38,6.84,fruta fresca
+Maracuyá,maracuya,Imbabura,2025,125,74.5,10.33,10.55,fruta fresca
+Yuca,yuca,Imbabura,2025,115,28.6,6.31,5.87,raíz fresca
+Haba Seca,,Imbabura,2025,99,-66.4,0.49,0.69,grano seco
+Limón,,Imbabura,2025,61,-82.2,3.63,6.66,fruta fresca
+Cebolla Blanca,,Imbabura,2025,2,-68.6,2.27,4.98,tallo fresco
+Maíz Duro Seco,maiz_duro,Loja,2025,26351,6.7,3.8,5.09,grano seco
+Café,cafe_robusta,Loja,2025,2667,19.8,0.38,0.24,grano oro
+Caña De Azúcar Para Azúcar,,Loja,2025,2042,-19.2,139.45,84.47,tallo fresco
+Maíz Suave Seco,maiz_suave,Loja,2025,1765,-52.0,0.86,1.37,grano seco
+Fréjol Seco,,Loja,2025,1325,-71.2,0.53,0.78,grano seco
+Caña De Azúcar Para Otros Usos,,Loja,2025,1289,-9.9,6.98,45.26,tallo fresco
+Banano,banano,Loja,2025,1100,-18.1,3.75,44.05,fruta fresca
+Maíz Duro Choclo,,Loja,2025,1030,41.3,4.66,3.86,en choclo
+Cebada,,Loja,2025,398,655.7,0.62,1.97,grano seco
+Fréjol Tierno,,Loja,2025,292,-6.6,0.6,2.76,en vaina
+Tomate Riñón,,Loja,2025,269,46.0,18.86,35.25,fruta fresca
+Trigo,,Loja,2025,236,235.6,0.71,2.15,grano seco
+Arveja Seca,,Loja,2025,224,72.6,0.31,0.5,grano seco
+Haba Seca,,Loja,2025,222,-74.6,0.31,0.69,grano seco
+Arroz,arroz,Loja,2025,187,123.6,18.03,5.02,arroz en cáscara
+Haba Tierna,haba,Loja,2025,185,74.0,0.54,3.19,haba tierna en vaina
+Papa,papa,Loja,2025,179,253.9,3.43,14.35,tubérculo fresco
+Maní,,Loja,2025,170,-77.7,1.05,0.93,grano descascarado
+Yuca,yuca,Loja,2025,139,-46.5,4.38,5.87,raíz fresca
+Arveja Tierna,,Loja,2025,131,1.7,1.65,3.34,en vaina
+Maíz Suave Choclo,,Loja,2025,120,-34.5,2.99,3.63,en choclo
+Maracuyá,maracuya,Loja,2025,74,-21.7,18.27,10.55,fruta fresca
+Plátano,platano,Loja,2025,72,-56.7,4.26,6.81,fruta fresca
+Cacao,cacao,Loja,2025,59,-82.7,,0.82,almendra seca
+Limón,,Loja,2025,49,-59.5,8.49,6.66,fruta fresca
+Mango,,Loja,2025,39,,,12.0,fruta fresca
+Cebolla Blanca,,Loja,2025,29,-80.0,2.34,4.98,tallo fresco
+Naranja,,Loja,2025,25,-27.4,4.55,11.67,fruta fresca
+Aguacate,,Loja,2025,3,-90.0,,4.34,fruta fresca
+Cacao,cacao,Los Ríos,2025,141383,13.2,0.94,0.82,almendra seca
+Maíz Duro Seco,maiz_duro,Los Ríos,2025,110931,5.3,5.33,5.09,grano seco
+Arroz,arroz,Los Ríos,2025,91623,-17.0,4.91,5.02,arroz en cáscara
+Banano,banano,Los Ríos,2025,76779,10.8,43.8,44.05,fruta fresca
+Palma Africana,palma_aceitera,Los Ríos,2025,45225,-9.2,25.25,19.99,fruta fresca
+Plátano,platano,Los Ríos,2025,13871,-14.1,6.01,6.81,fruta fresca
+Soya,,Los Ríos,2025,5442,-51.5,1.76,1.42,grano seco
+Tabaco,,Los Ríos,2025,4823,-7.9,1.42,1.36,hoja seca
+Piña,pina,Los Ríos,2025,3383,3601.0,50.0,68.18,fruta fresca
+Maíz Duro Choclo,,Los Ríos,2025,1895,691.5,2.3,3.86,en choclo
+Palmito,,Los Ríos,2025,1662,9234.3,3.46,4.56,tallo fresco
+Caña De Azúcar Para Azúcar,,Los Ríos,2025,1361,-41.5,76.0,84.47,tallo fresco
+Mango,,Los Ríos,2025,1066,,12.56,12.0,fruta fresca
+Café,cafe_robusta,Los Ríos,2025,691,68962.8,0.07,0.24,grano oro
+Naranja,,Los Ríos,2025,657,-72.7,15.03,11.67,fruta fresca
+Maíz Suave Seco,maiz_suave,Los Ríos,2025,553,,4.45,1.37,grano seco
+Orito,,Los Ríos,2025,356,168.2,17.75,6.84,fruta fresca
+Yuca,yuca,Los Ríos,2025,298,-59.3,10.07,5.87,raíz fresca
+Maracuyá,maracuya,Los Ríos,2025,177,152.7,8.95,10.55,fruta fresca
+Fréjol Seco,,Los Ríos,2025,128,-81.8,0.24,0.78,grano seco
+Cacao,cacao,Manabí,2025,146653,20.7,0.72,0.82,almendra seca
+Maíz Duro Seco,maiz_duro,Manabí,2025,96982,12.6,5.23,5.09,grano seco
+Plátano,platano,Manabí,2025,57086,-15.6,6.55,6.81,fruta fresca
+Café,cafe_robusta,Manabí,2025,9468,176.4,0.19,0.24,grano oro
+Arroz,arroz,Manabí,2025,8043,-59.2,4.8,5.02,arroz en cáscara
+Palma Africana,palma_aceitera,Manabí,2025,6334,56.1,18.48,19.99,fruta fresca
+Maracuyá,maracuya,Manabí,2025,2771,41.5,5.14,10.55,fruta fresca
+Yuca,yuca,Manabí,2025,1799,-7.2,4.25,5.87,raíz fresca
+Fréjol Tierno,,Manabí,2025,1137,242.3,0.6,2.76,en vaina
+Banano,banano,Manabí,2025,1039,-61.5,16.99,44.05,fruta fresca
+Naranja,,Manabí,2025,791,-57.0,28.03,11.67,fruta fresca
+Maní,,Manabí,2025,633,-68.1,0.76,0.93,grano descascarado
+Fréjol Seco,,Manabí,2025,617,2754.3,0.93,0.78,grano seco
+Limón,,Manabí,2025,226,-93.4,6.84,6.66,fruta fresca
+Haba Tierna,haba,Manabí,2025,179,-52.0,1.53,3.19,haba tierna en vaina
+Cebolla Blanca,,Manabí,2025,158,,6.98,4.98,tallo fresco
+Maíz Duro Choclo,,Manabí,2025,89,,4.07,3.86,en choclo
+Caña De Azúcar Para Otros Usos,,Manabí,2025,87,-58.3,20.03,45.26,tallo fresco
+Mango,,Manabí,2025,31,-76.2,5.36,12.0,fruta fresca
+Maíz Suave Seco,maiz_suave,Manabí,2025,22,-98.6,3.98,1.37,grano seco
+Tomate Riñón,,Manabí,2025,18,-31.6,6.66,35.25,fruta fresca
+Plátano,platano,Morona Santiago,2025,3986,15.2,6.58,6.81,fruta fresca
+Yuca,yuca,Morona Santiago,2025,3084,22.4,2.91,5.87,raíz fresca
+Banano,banano,Morona Santiago,2025,2533,375.5,3.22,44.05,fruta fresca
+Caña De Azúcar Para Otros Usos,,Morona Santiago,2025,1381,-31.4,5.13,45.26,tallo fresco
+Maíz Duro Seco,maiz_duro,Morona Santiago,2025,1075,9.1,1.27,5.09,grano seco
+Orito,,Morona Santiago,2025,353,8.2,3.68,6.84,fruta fresca
+Naranja,,Morona Santiago,2025,205,,0.63,11.67,fruta fresca
+Cacao,cacao,Morona Santiago,2025,160,-5.7,0.37,0.82,almendra seca
+Café,cafe_robusta,Morona Santiago,2025,99,-66.8,0.52,0.24,grano oro
+Maní,,Morona Santiago,2025,97,-6.3,0.45,0.93,grano descascarado
+Maíz Suave Seco,maiz_suave,Morona Santiago,2025,85,-50.6,0.78,1.37,grano seco
+Piña,pina,Morona Santiago,2025,60,-62.6,30.76,68.18,fruta fresca
+Maíz Duro Choclo,,Morona Santiago,2025,56,-77.1,3.18,3.86,en choclo
+Papa,papa,Morona Santiago,2025,40,,3.64,14.35,tubérculo fresco
+Haba Tierna,haba,Morona Santiago,2025,33,,2.07,3.19,haba tierna en vaina
+Fréjol Seco,,Morona Santiago,2025,30,-37.4,0.6,0.78,grano seco
+Fréjol Tierno,,Morona Santiago,2025,28,203.0,0.25,2.76,en vaina
+Maíz Suave Choclo,,Morona Santiago,2025,26,,0.25,3.63,en choclo
+Maracuyá,maracuya,Morona Santiago,2025,9,,43.64,10.55,fruta fresca
+Cacao,cacao,Napo,2025,17728,-4.2,0.91,0.82,almendra seca
+Palmito,,Napo,2025,1764,,,4.56,tallo fresco
+Yuca,yuca,Napo,2025,1058,3.5,2.07,5.87,raíz fresca
+Plátano,platano,Napo,2025,917,-67.5,7.52,6.81,fruta fresca
+Maíz Duro Seco,maiz_duro,Napo,2025,870,-1.7,4.59,5.09,grano seco
+Banano,banano,Napo,2025,568,,1.2,44.05,fruta fresca
+Orito,,Napo,2025,354,,3.28,6.84,fruta fresca
+Mango,,Napo,2025,105,,4.55,12.0,fruta fresca
+Café,cafe_robusta,Napo,2025,90,-89.2,0.11,0.24,grano oro
+Limón,,Napo,2025,8,-90.6,3.18,6.66,fruta fresca
+Cacao,cacao,Orellana,2025,18435,63.4,0.6,0.82,almendra seca
+Palma Africana,palma_aceitera,Orellana,2025,11486,-16.0,21.66,19.99,fruta fresca
+Café,cafe_robusta,Orellana,2025,6108,71.9,0.27,0.24,grano oro
+Plátano,platano,Orellana,2025,2658,-6.0,5.13,6.81,fruta fresca
+Maíz Duro Seco,maiz_duro,Orellana,2025,2560,-3.7,2.44,5.09,grano seco
+Naranja,,Orellana,2025,311,-13.2,1.95,11.67,fruta fresca
+Yuca,yuca,Orellana,2025,253,-53.1,1.68,5.87,raíz fresca
+Mango,,Orellana,2025,198,9.5,4.55,12.0,fruta fresca
+Yuca,yuca,Pastaza,2025,2985,277.5,9.7,5.87,raíz fresca
+Plátano,platano,Pastaza,2025,2835,90.6,8.33,6.81,fruta fresca
+Cacao,cacao,Pastaza,2025,1313,2915.8,0.46,0.82,almendra seca
+Caña De Azúcar Para Otros Usos,,Pastaza,2025,891,887.5,79.06,45.26,tallo fresco
+Maíz Duro Seco,maiz_duro,Pastaza,2025,533,1010.0,1.69,5.09,grano seco
+Café,cafe_robusta,Pastaza,2025,433,668.7,0.56,0.24,grano oro
+Naranja,,Pastaza,2025,186,,4.44,11.67,fruta fresca
+Fréjol Tierno,,Pastaza,2025,32,,3.27,2.76,en vaina
+Limón,,Pastaza,2025,28,,2.82,6.66,fruta fresca
+Orito,,Pastaza,2025,9,-91.4,5.11,6.84,fruta fresca
+Maracuyá,maracuya,Pastaza,2025,3,,,10.55,fruta fresca
+Cacao,cacao,Pichincha,2025,12603,8.1,0.5,0.82,almendra seca
+Palmito,,Pichincha,2025,5381,21.9,4.37,4.56,tallo fresco
+Palma Africana,palma_aceitera,Pichincha,2025,2935,-29.6,16.51,19.99,fruta fresca
+Café,cafe_robusta,Pichincha,2025,2906,12.6,0.22,0.24,grano oro
+Maíz Suave Choclo,,Pichincha,2025,1663,0.7,4.15,3.63,en choclo
+Papa,papa,Pichincha,2025,1503,224.0,15.41,14.35,tubérculo fresco
+Aguacate,,Pichincha,2025,1091,-24.0,4.08,4.34,fruta fresca
+Maíz Suave Seco,maiz_suave,Pichincha,2025,1015,-76.2,1.91,1.37,grano seco
+Caña De Azúcar Para Otros Usos,,Pichincha,2025,948,-47.2,19.61,45.26,tallo fresco
+Cebolla Blanca,,Pichincha,2025,747,33.8,4.82,4.98,tallo fresco
+Trigo,,Pichincha,2025,467,97.4,1.39,2.15,grano seco
+Cebada,,Pichincha,2025,392,-29.1,3.69,1.97,grano seco
+Plátano,platano,Pichincha,2025,310,-45.4,6.35,6.81,fruta fresca
+Limón,,Pichincha,2025,245,3.0,7.91,6.66,fruta fresca
+Maíz Duro Seco,maiz_duro,Pichincha,2025,230,-72.8,1.67,5.09,grano seco
+Naranja,,Pichincha,2025,206,,1.52,11.67,fruta fresca
+Fréjol Seco,,Pichincha,2025,201,-60.7,0.85,0.78,grano seco
+Arveja Tierna,,Pichincha,2025,156,-34.3,2.78,3.34,en vaina
+Haba Tierna,haba,Pichincha,2025,153,-60.9,2.09,3.19,haba tierna en vaina
+Maíz Duro Choclo,,Pichincha,2025,118,12.3,1.79,3.86,en choclo
+Maracuyá,maracuya,Pichincha,2025,81,-68.3,23.09,10.55,fruta fresca
+Arveja Seca,,Pichincha,2025,64,-45.5,0.3,0.5,grano seco
+Tomate Riñón,,Pichincha,2025,48,139.0,11.83,35.25,fruta fresca
+Haba Seca,,Pichincha,2025,45,9.7,1.12,0.69,grano seco
+Yuca,yuca,Pichincha,2025,40,,2.43,5.87,raíz fresca
+Fréjol Tierno,,Pichincha,2025,10,-93.0,4.09,2.76,en vaina
+Brócoli,,Pichincha,2025,4,-11.2,4.63,15.85,repollo
+Maíz Duro Seco,maiz_duro,Santa Elena,2025,4777,41.1,3.82,5.09,grano seco
+Banano,banano,Santa Elena,2025,4302,248.1,111.6,44.05,fruta fresca
+Cacao,cacao,Santa Elena,2025,1242,100.8,1.17,0.82,almendra seca
+Plátano,platano,Santa Elena,2025,311,47.7,4.82,6.81,fruta fresca
+Limón,,Santa Elena,2025,154,-80.2,4.6,6.66,fruta fresca
+Café,cafe_robusta,Santa Elena,2025,104,113.2,0.21,0.24,grano oro
+Fréjol Seco,,Santa Elena,2025,66,,0.58,0.78,grano seco
+Haba Seca,,Santa Elena,2025,28,,0.65,0.69,grano seco
+Maracuyá,maracuya,Santa Elena,2025,28,-88.2,4.71,10.55,fruta fresca
+Piña,pina,Santa Elena,2025,12,66.0,1.2,68.18,fruta fresca
+Yuca,yuca,Santa Elena,2025,3,,14.39,5.87,raíz fresca
+Cacao,cacao,Santo Domingo de los Tsáchilas,2025,29780,-0.8,0.9,0.82,almendra seca
+Plátano,platano,Santo Domingo de los Tsáchilas,2025,17784,-2.4,7.75,6.81,fruta fresca
+Piña,pina,Santo Domingo de los Tsáchilas,2025,7006,43.2,85.89,68.18,fruta fresca
+Palma Africana,palma_aceitera,Santo Domingo de los Tsáchilas,2025,5937,30.5,18.5,19.99,fruta fresca
+Yuca,yuca,Santo Domingo de los Tsáchilas,2025,4323,15.7,7.91,5.87,raíz fresca
+Palmito,,Santo Domingo de los Tsáchilas,2025,1351,260.7,5.7,4.56,tallo fresco
+Maracuyá,maracuya,Santo Domingo de los Tsáchilas,2025,942,-8.1,12.56,10.55,fruta fresca
+Café,cafe_robusta,Santo Domingo de los Tsáchilas,2025,805,54.1,0.44,0.24,grano oro
+Maíz Duro Seco,maiz_duro,Santo Domingo de los Tsáchilas,2025,684,152.9,3.14,5.09,grano seco
+Orito,,Santo Domingo de los Tsáchilas,2025,589,-41.7,4.67,6.84,fruta fresca
+Banano,banano,Santo Domingo de los Tsáchilas,2025,494,15.5,74.92,44.05,fruta fresca
+Caña De Azúcar Para Otros Usos,,Santo Domingo de los Tsáchilas,2025,357,99.8,40.89,45.26,tallo fresco
+Naranja,,Santo Domingo de los Tsáchilas,2025,280,-9.8,14.0,11.67,fruta fresca
+Maíz Suave Seco,maiz_suave,Santo Domingo de los Tsáchilas,2025,38,,1.36,1.37,grano seco
+Limón,,Santo Domingo de los Tsáchilas,2025,1,0.0,0.68,6.66,fruta fresca
+Palma Africana,palma_aceitera,Sucumbíos,2025,30372,-17.6,20.83,19.99,fruta fresca
+Cacao,cacao,Sucumbíos,2025,27378,-7.1,0.45,0.82,almendra seca
+Café,cafe_robusta,Sucumbíos,2025,5644,-3.1,0.22,0.24,grano oro
+Maíz Duro Seco,maiz_duro,Sucumbíos,2025,2897,-35.1,1.48,5.09,grano seco
+Plátano,platano,Sucumbíos,2025,2464,-27.6,5.98,6.81,fruta fresca
+Orito,,Sucumbíos,2025,735,59.6,13.54,6.84,fruta fresca
+Yuca,yuca,Sucumbíos,2025,636,222.6,5.05,5.87,raíz fresca
+Caña De Azúcar Para Otros Usos,,Sucumbíos,2025,438,-16.1,7.04,45.26,tallo fresco
+Naranja,,Sucumbíos,2025,419,23.1,10.75,11.67,fruta fresca
+Maíz Duro Choclo,,Sucumbíos,2025,82,,3.18,3.86,en choclo
+Banano,banano,Sucumbíos,2025,48,51.4,,44.05,fruta fresca
+Piña,pina,Sucumbíos,2025,38,-53.9,4.55,68.18,fruta fresca
+Arroz,arroz,Sucumbíos,2025,33,-96.9,0.73,5.02,arroz en cáscara
+Maíz Suave Choclo,,Tungurahua,2025,2956,62.8,4.11,3.63,en choclo
+Cebolla Blanca,,Tungurahua,2025,2702,-0.5,5.87,4.98,tallo fresco
+Brócoli,,Tungurahua,2025,2614,3.2,18.35,15.85,repollo
+Papa,papa,Tungurahua,2025,2248,44.2,16.39,14.35,tubérculo fresco
+Aguacate,,Tungurahua,2025,688,84.6,7.93,4.34,fruta fresca
+Tomate De Árbol,tomate_de_arbol,Tungurahua,2025,559,-20.7,17.49,15.5,fruta fresca
+Haba Tierna,haba,Tungurahua,2025,483,-44.4,6.36,3.19,haba tierna en vaina
+Tomate Riñón,,Tungurahua,2025,384,25.2,31.6,35.25,fruta fresca
+Arveja Tierna,,Tungurahua,2025,194,-68.0,4.46,3.34,en vaina
+Fréjol Tierno,,Tungurahua,2025,107,128.4,2.32,2.76,en vaina
+Maíz Suave Seco,maiz_suave,Tungurahua,2025,80,-46.7,3.03,1.37,grano seco
+Cebada,,Tungurahua,2025,37,-66.1,0.97,1.97,grano seco
+Haba Seca,,Tungurahua,2025,14,416.6,0.93,0.69,grano seco
+Limón,,Tungurahua,2025,14,-81.8,3.03,6.66,fruta fresca
+Trigo,,Tungurahua,2025,8,,1.89,2.15,grano seco
+Maracuyá,maracuya,Tungurahua,2025,4,,,10.55,fruta fresca
+Maíz Duro Choclo,,Tungurahua,2025,0,,13.64,3.86,en choclo
+Plátano,platano,Zamora Chinchipe,2025,1053,76.5,6.58,6.81,fruta fresca
+Café,cafe_robusta,Zamora Chinchipe,2025,1049,-14.6,0.17,0.24,grano oro
+Cacao,cacao,Zamora Chinchipe,2025,999,11.3,0.48,0.82,almendra seca
+Yuca,yuca,Zamora Chinchipe,2025,694,350.1,1.57,5.87,raíz fresca
+Caña De Azúcar Para Otros Usos,,Zamora Chinchipe,2025,157,-24.4,11.04,45.26,tallo fresco
+Maíz Duro Seco,maiz_duro,Zamora Chinchipe,2025,152,-85.8,1.42,5.09,grano seco
+Banano,banano,Zamora Chinchipe,2025,25,-82.3,0.84,44.05,fruta fresca
+Maíz Duro Choclo,,Zamora Chinchipe,2025,6,-94.5,0.34,3.86,en choclo

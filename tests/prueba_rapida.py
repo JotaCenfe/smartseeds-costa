@@ -18,10 +18,12 @@ from src import cobertura, nisar, terreno  # noqa: E402
 from src.aptitud import aptitud, cargar_requisitos  # noqa: E402
 from src.clima_relieve import corregir_temp_por_altura, nombre_tile, pendiente_grados  # noqa: E402
 from src.config import provincia_sugerida, zona_de_punto  # noqa: E402
-from src.mercado import clasificar, mercado, mercado_detalle  # noqa: E402
+from src.mercado import clasificar, evidencia_local, mas_sembrados, mercado, mercado_detalle  # noqa: E402
 from src.preparar_mercado import variacion_precio  # noqa: E402
-from src.recomendar import (empatados, evaluar_todos, recomendar, reparto_mejor_cultivo,  # noqa: E402
+from src.recomendar import (banda, empatados, evaluar_todos, recomendar, reparto_mejor_cultivo,  # noqa: E402
                             suelo_detalle, tiempo_texto)
+from src.suelo_lluvia import clase_textura, con_lluvia_mensual, lluvia_mensual_de, suelo_texto  # noqa: E402
+from src.vecindad import agua_en_vecinos, resumen_vecinos  # noqa: E402
 
 req = cargar_requisitos().set_index("cultivo")
 
@@ -47,6 +49,21 @@ mojado = dict(costa, humedad=0.95)
 assert aptitud(dict(mojado, humedad_confiable=0.9), req.loc["cacao"].to_dict()) < 100
 assert aptitud(dict(mojado, humedad_confiable=0.1), req.loc["cacao"].to_dict()) == 100
 
+# --- Puntaje graduado: no es lo mismo estar en lo ideal que en lo que el cultivo aguanta ---
+cacao = req.loc["cacao"].to_dict()                    # ideal 21–32 °C, aguanta desde 10 °C
+assert 40 < aptitud(dict(costa, temp=19), cacao) < aptitud(costa, cacao)
+# Llover de más resta, pero como máximo la mitad de la nota (el daño llega por el drenaje)
+assert aptitud(dict(costa, lluvia=2000), cacao) > aptitud(dict(costa, lluvia=5000), cacao) > \
+    aptitud(dict(costa, lluvia=9000), cacao) > 60
+# Acidez del suelo (pH de SoilGrids): cuenta solo si la celda la trae
+assert aptitud(dict(costa, ph=4.3), cacao) < aptitud(dict(costa, ph=5.5), cacao) == aptitud(costa, cacao)
+# Agua en los terrenos vecinos: castiga al cacao, no al arroz
+assert aptitud(dict(costa, agua_vecinos=0.3), cacao) < 70
+assert aptitud(dict(costa, agua_vecinos=0.3, pendiente=1), req.loc["arroz"].to_dict()) == 100
+assert aptitud(dict(costa, agua_vecinos=0.02), cacao) == 100                 # menos del 5 %: no cuenta
+# La papa no usa la temperatura mundial de EcoCrop (no hay rango del Ecuador): sigue con la tabla
+assert pd.isna(req.loc["papa", "temp_opt_min_C"]) and req.loc["haba", "temp_opt_max_C"] == 14
+
 top = recomendar(costa, "Santo Domingo de los Tsáchilas")
 assert len(top) == 3 and all(c["puntaje"] >= 40 for c in top)
 assert not {"papa", "quinua", "haba"} & {c["cultivo"] for c in top}
@@ -58,7 +75,7 @@ regado = dict(seco, riego=True)
 for nombre in ("arroz", "banano", "cacao"):
     c = req.loc[nombre].to_dict()
     assert aptitud(seco, c) < aptitud(regado, c) < 100                       # mejora, pero no llega a 100
-assert aptitud(regado, req.loc["arroz"].to_dict()) > aptitud(regado, req.loc["banano"].to_dict())  # falta menos agua
+assert aptitud(regado, req.loc["arroz"].to_dict()) < aptitud(regado, req.loc["banano"].to_dict())  # al arroz le falta más agua
 assert aptitud(regado, req.loc["maiz_duro"].to_dict()) == aptitud(seco, req.loc["maiz_duro"].to_dict()) == 100
 assert aptitud(dict(costa, riego=True), req.loc["cacao"].to_dict()) == 100   # si llueve bastante, no cambia nada
 assert aptitud(dict(sierra, riego=True), req.loc["cacao"].to_dict()) < 40    # el riego no quita el frío
@@ -68,15 +85,35 @@ assert aptitud(dict(inundado, riego=True), req.loc["cacao"].to_dict()) ==     ap
 arrozal = dict(costa, pendiente=1, encharcamiento=0.37, humedad=0.25, humedad_confiable=0.9)
 assert aptitud(arrozal, req.loc["arroz"].to_dict()) == 100
 
-# --- Empates: el orden depende de lo que prefiere el agricultor, no de la tabla ---
+# Cultivos de ciclo corto: se comparan con la lluvia de los meses del cultivo, no con la del año
+LLUVIA_DAULE = [212, 365, 335, 224, 85, 30, 18, 4, 7, 5, 30, 74]            # mm por mes, enero a diciembre
+daule = dict(seco, lluvia=1389, lluvia_mensual=LLUVIA_DAULE)
+maiz = req.loc["maiz_duro"].to_dict()
+assert aptitud(daule, maiz) == 100                                            # 4 meses de invierno: 1.136 mm
+assert aptitud(dict(daule, lluvia_mensual=[10] * 12), maiz) < 60             # 40 mm en el ciclo: no alcanza
+arroz = req.loc["arroz"].to_dict()
+assert aptitud(daule, arroz) < aptitud(dict(daule, riego=True), arroz) < 100
+# ...y si el radar vio agua en el terreno, al arroz no le falta agua aunque llueva poco
+assert aptitud(dict(daule, encharcamiento=0.37, pendiente=1), arroz) == 100
+assert aptitud(dict(daule, encharcamiento=0.37, pendiente=1), maiz) < 40
+# El cacao (permanente) sigue con la lluvia del año
+assert aptitud(daule, cacao) == aptitud(dict(daule, lluvia_mensual=None), cacao) == 100
+
+# --- Orden: franja de aptitud, luego la provincia, el mercado y la preferencia ---
+assert banda(97.4) == 95 and banda(97.6) == 100 and banda(100) == 100
 pronto = evaluar_todos(costa, "Guayas", preferencia="pronto")
 largo = evaluar_todos(costa, "Guayas", preferencia="largo")
-# Entre empatados va primero el de mejor mercado: maracuyá y plátano ("alta"), luego los de "media"
-assert [c["cultivo"] for c in pronto[:3]] == ["maracuya", "platano", "arroz"]        # el más rápido primero
-assert [c["cultivo"] for c in largo[:3]] == ["platano", "maracuya", "banano"]        # permanente primero
-assert pronto[-1]["cultivo"] != "cacao" and [c["cultivo"] for c in pronto if c["puntaje"] == 100][-1] == "cacao"  # saturado: último de los empatados
+# Los siete primeros tienen 100. Van primero los que se siembran y rinden bien en Guayas, y
+# entre esos el de mejor mercado: palma ("alta"), luego arroz y banano ("media")
+assert [c["cultivo"] for c in pronto[:3]] == ["palma_aceitera", "arroz", "banano"]   # el más rápido primero
+assert [c["cultivo"] for c in largo[:3]] == ["palma_aceitera", "banano", "arroz"]    # permanente primero
+cien = [c for c in pronto if c["puntaje"] == 100]
+assert [c["evidencia"] for c in cien] == ["fuerte"] * 5 + ["presente", "poca"]       # la yuca casi no se siembra en Guayas
+assert cien[3]["mercado"] == cien[4]["mercado"] == "saturado"                        # maíz y cacao: después de los de "media"
 assert {c["cultivo"]: c["puntaje"] for c in pronto} == {c["cultivo"]: c["puntaje"] for c in largo}
-assert {"cacao", "banano"} <= {c["cultivo"] for c in empatados(pronto)}              # empatados fuera del top 3
+assert {c["cultivo"] for c in empatados(pronto)} == {"maiz_duro", "cacao", "pina", "yuca"}   # misma franja, fuera del top 3
+# Un punto menos de aptitud no cambia de franja: el plátano (95) queda detrás de los de 100
+assert pronto[7]["cultivo"] == "platano" and banda(pronto[7]["puntaje"]) == 95
 assert "4 meses" in tiempo_texto(req.loc["maiz_duro"].to_dict())
 assert "3 años" in tiempo_texto(req.loc["cacao"].to_dict()) and tiempo_texto({}) is None
 
@@ -114,6 +151,45 @@ cambio = variacion_precio(precios, "Yuca", "GUAYAS")
 assert cambio["meses"] == 6 and abs(cambio["var"] - 50) < 1e-6
 assert variacion_precio(precios[precios["mes"] != 6], "Yuca", "GUAYAS") is None   # 5 meses: no alcanza
 assert variacion_precio(precios, "Yuca", "MANABI") is None
+
+# --- Lo que se siembra en la provincia (ESPAC) -------------------------------
+assert evidencia_local("cacao", "Guayas")["nivel"] == "fuerte"            # 104.939 ha y rinde más que el país
+assert evidencia_local("pina", "Guayas")["nivel"] == "presente"           # se siembra, pero rinde menos
+assert evidencia_local("maracuya", "Guayas")["nivel"] == "poca"           # 220 ha
+assert evidencia_local("papa", "Guayas")["nivel"] == "poca" and "no registra" in evidencia_local("papa", "Guayas")["texto"]
+assert evidencia_local("cultivo_que_no_existe", "Guayas")["nivel"] == "sin_datos"
+assert [x["nombre"] for x in mas_sembrados("guayas", 3)] == ["Arroz", "Cacao", "Banano"]
+assert mas_sembrados("Provincia inventada") == []
+
+# --- Suelo y lluvia con detalle local ----------------------------------------
+assert clase_textura(40, 20) == "franco" and clase_textura(20, 60) == "arcilloso"
+assert clase_textura(80, 5) == "arenoso franco" and clase_textura(33, 30) == "franco arcilloso"
+assert clase_textura(None, 30) is None and clase_textura(float("nan"), 30) is None
+assert suelo_texto({"ph": 5.4, "arena": 33, "arcilla": 30}) == "suelo franco arcilloso, pH 5.4"
+assert suelo_texto({"ph": None}) is None
+mensual = {"celda": np.array([7, 8, 9]), "lluvia": np.array([[10.0] * 12, [30.0] * 12, [50.0] * 12])}
+assert lluvia_mensual_de(mensual, 8) == [30.0] * 12
+assert lluvia_mensual_de(mensual, [7, 9], [3, 1]) == [20.0] * 12          # promedio con pesos
+assert lluvia_mensual_de(mensual, 99) is None and lluvia_mensual_de(None, 8) is None
+assert con_lluvia_mensual(pd.DataFrame({"celda": [9, 7]}), mensual)["lluvia_mensual"].tolist() == [[50.0] * 12, [10.0] * 12]
+
+# --- Los terrenos vecinos (rejilla de Daule, 180 x 180, con un solo cuadro con agua) ---
+filas_d = columnas_d = 180
+zona_falsa = pd.DataFrame({"celda": np.arange(filas_d * columnas_d)})
+zona_falsa["lat"] = -1.65 - (zona_falsa["celda"] // columnas_d + 0.5) * 8 / 3600
+zona_falsa["lon"] = -80.05 + (zona_falsa["celda"] % columnas_d + 0.5) * 8 / 3600
+zona_falsa["altura"], zona_falsa["encharcamiento"], zona_falsa["cobertura"] = 10.0, 0.0, "vegetacion_baja"
+charco = 90 * columnas_d + 90
+zona_falsa.loc[charco, ["encharcamiento", "cobertura", "altura"]] = [0.6, "agua", 4.0]
+vec = agua_en_vecinos(zona_falsa, "daule")
+assert vec[charco] == 0                                   # el propio cuadro no cuenta como vecino
+assert 0 < vec[charco + 1] < 0.05 and vec[charco + 3 * columnas_d] > 0     # sus vecinos sí lo ven
+assert vec[charco + 6] == 0 and vec[0] == 0               # a más de 1 km ya no
+resumen = resumen_vecinos(zona_falsa, zona_falsa.loc[charco + 1, "lat"], zona_falsa.loc[charco + 1, "lon"])
+assert 40 <= resumen["n"] <= 60 and 0 < resumen["con_agua"] < 0.05 and resumen["tipos"]["vegetacion_baja"] > 0.9
+assert resumen["diferencia_altura"] == 0
+en_el_charco = resumen_vecinos(zona_falsa, zona_falsa.loc[charco, "lat"], zona_falsa.loc[charco, "lon"])
+assert en_el_charco["con_agua"] == 0 and en_el_charco["diferencia_altura"] == -6    # está 6 m más bajo
 
 # --- Clima y relieve --------------------------------------------------------
 assert abs(corregir_temp_por_altura(24.0, 500, 1500) - 17.5) < 1e-6   # 1000 m más alto = 6,5 °C menos
@@ -222,5 +298,6 @@ assert [(c["clase"], c["fraccion"], c["cultivable"]) for c in comp] ==     [("cu
 assert cobertura.es_cultivable(mezcla["cobertura"]).tolist() == [True, False, True]
 assert cobertura.composicion(pd.DataFrame({"altura": [1.0]})) is None
 
-print("TODO BIEN: aptitud, riego, empates, suelo, mercado, clima/relieve, zonas, terreno dibujado, "
+print("TODO BIEN: aptitud graduada, riego, lluvia del ciclo, orden, suelo, mercado, provincia, vecinos, "
+      "clima/relieve, zonas, terreno dibujado, "
       "capas NISAR y tipo de terreno.")

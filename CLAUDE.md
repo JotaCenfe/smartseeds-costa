@@ -1,7 +1,7 @@
 # SmartSeeds · contexto para retomar el trabajo
 
 Archivo de traspaso. Resume lo que no se ve leyendo el código: decisiones, hallazgos
-y en qué punto quedó cada cosa. Estado al sábado 14 de noviembre de 2026, 15:15.
+y en qué punto quedó cada cosa. Estado al sábado 14 de noviembre de 2026, 17:15.
 El detalle de instalación y recursos está en `README.md` y `README_PROGRAMADOR.md`.
 
 ## El proyecto
@@ -39,6 +39,8 @@ python -m src.clima_relieve ZONA              # NASADEM + POWER -> tabla por cel
 python -m src.nisar ZONA procesar             # GCOV en remoto -> nisar_ZONA.npz
 python -m src.nisar ZONA humedad              # SME2 en remoto -> humedad_ZONA.npz
 python -m src.nisar ZONA capas                # llena las columnas NISAR de la tabla
+python -m src.suelo_lluvia ZONA               # SoilGrids (pH, textura) y CHELSA (lluvia a 1 km) -> tabla + lluvia_mensual_ZONA.npz
+python -m src.vecindad ZONA                   # columna `agua_vecinos` (después de `nisar ZONA capas`)
 python -m src.cobertura entrenar              # modelo de tipo de terreno -> columna `cobertura` (ejecutar al final)
 python -m src.preparar_mercado                # arma tablas/mercado.csv con los Excel de datos/crudos/mercado/ (`ver` = solo mostrar)
 ```
@@ -52,7 +54,9 @@ Enlace directo a un terreno para demos: `http://localhost:8501/?lat=-0.33&lon=-7
 | `src/config.py` | Rutas, zonas (`ZONAS`), formato de la tabla por celda, rejilla. **Una zona nueva se agrega aquí.** |
 | `src/clima_relieve.py` | NASA POWER (en vivo) y NASADEM → `datos/procesados/celdas_ZONA.csv` |
 | `src/nisar.py` | Búsqueda en ASF, lectura remota de GCOV y SME2, capas, llenado de la tabla |
-| `src/aptitud.py` | Puntaje 0–100 por cultivo y razones en texto |
+| `src/aptitud.py` | Puntaje 0–100 por cultivo y razones en texto. Temperatura, lluvia y pH graduados entre el rango ideal y el que el cultivo aguanta (`tablas/ecocrop_cultivos.csv`) |
+| `src/suelo_lluvia.py` | SoilGrids (pH, textura, 250 m) y CHELSA (lluvia del año y de cada mes, 1 km) → columnas de la tabla. Pide rasterio (solo desarrollo) |
+| `src/vecindad.py` | Agua en los terrenos vecinos (`agua_vecinos`) y resumen de lo que hay alrededor de un terreno. Solo numpy y pandas |
 | `src/mercado.py` | Regla alta / media / saturado sobre `tablas/mercado.csv`; fila de la provincia y, si no hay, la nacional (compara sin tildes ni mayúsculas) |
 | `src/preparar_mercado.py` | Arma `tablas/mercado.csv` desde los dos Excel del SIPA. Pide openpyxl (solo desarrollo) |
 | `src/recomendar.py` | Une aptitud y mercado; adjunta el suelo preferido de `tablas/suelo_cultivos.csv` (solo informativo); `reparto_mejor_cultivo()` dice qué cultivo gana en cada parte de un terreno grande |
@@ -64,6 +68,7 @@ Contratos acordados: tabla por celda `celda, lat, lon, altura, pendiente, temp, 
 encharcamiento, vegetacion` (más `humedad_confiable`); `aptitud(celda, cultivo) -> 0..100`;
 `mercado(cultivo, provincia) -> alta / media / saturado / sin_datos`.
 La celda puede llevar además la clave opcional `riego` (True si el agricultor dice que tiene riego); la pone la app, no está en la tabla.
+Columnas opcionales de la tabla (si faltan, ese factor no cuenta): `cobertura`, `ph`, `arcilla`, `arena`, `materia_organica`, `lluvia_power`, `agua_vecinos`. Clave opcional de la celda: `lluvia_mensual` (lista de 12), que también pone la app.
 
 Regla de oro: **todo lo pesado se calcula antes** y la app solo lee archivos pequeños.
 
@@ -99,13 +104,13 @@ Clave `daule`. Recuadro: lon −80.05 a −79.65, lat −2.05 a −1.65. Órbita
 - Encharcamiento: 7,2 % de las celdas con agua en ≥ 5 % de las pasadas; 3,8 % en ≥ 10 %; 0,3 % en ≥ 30 %. El agua baja de junio a septiembre y sube a fines de octubre.
 - Humedad media 0,27 m³/m³; dato "recomendado" en el 49 % de las celdas.
 - **Aquí NISAR sí cambia el orden.** Terreno inundado `?lat=-1.9356&lon=-79.6511`: solo arroz (49 sin riego, 92 con riego). Terreno seco `?lat=-1.8156&lon=-79.6733`: maíz duro 100, maracuyá 92, yuca 92; con riego el arroz sube de 48 a 92 y el banano de 33 a 88.
-- POWER da 770 mm/año para toda la zona: sin riego el arroz pierde puntos por lluvia. Para la demo de Daule hay que marcar "Sí, tengo riego".
+- (Reemplazado el 14 nov a las 17:00: la lluvia ahora es la de CHELSA y el orden cambió; ver "Análisis por terreno".) POWER daba 770 mm/año para toda la zona.
 - Al ejecutar Python fuera de Miniforge Prompt, `matplotlib` falla sin mensaje (código 127) si `envs/condor/Library/bin` no está en el PATH.
 
 ## Riego, empates y tiempos de cultivo (decidido con el usuario el 14 nov)
 
 - **Riego:** la app pregunta "¿Tienes riego?". El usuario pidió expresamente que marcar "sí" **no** infle todos los puntajes. Regla en `src/aptitud.py`: el riego solo reduce la falta de agua (lluvia bajo el mínimo y suelo que se seca), nunca la borra y no toca nada más. Nota de lluvia con riego = 1 − 0,5 × (parte del agua que falta). El 0,5 (`PESO_FALTA_AGUA_CON_RIEGO`) está sin calibrar.
-- **Empates:** en Santo Domingo 8 de 15 cultivos sacan 100 (9 en un terreno plano, de hasta 5° de pendiente, porque entra el arroz). `evaluar_todos()` ordena los empatados por mercado y luego por la pregunta "¿Qué buscas?" (`preferencia="pronto"` o `"largo"`). El puntaje no cambia. `empatados()` lista los que quedan fuera del top 3 con la misma aptitud.
+- **Empates (regla anterior; el orden actual está en "Análisis por terreno"):** en Santo Domingo 8 de 15 cultivos sacan 100 (9 en un terreno plano, de hasta 5° de pendiente, porque entra el arroz). `evaluar_todos()` ordena los empatados por mercado y luego por la pregunta "¿Qué buscas?" (`preferencia="pronto"` o `"largo"`). El puntaje no cambia. `empatados()` lista los que quedan fuera del top 3 con la misma aptitud.
 - **Tiempos:** cada cultivo muestra la primera cosecha (`ciclo_meses`) y el tipo. Son valores preliminares. No hay datos de costos y no se deben inventar.
 - Se descartó desempatar por "qué tan al centro del rango está el terreno": con rangos sin verificar daba un orden que no se puede defender (y la altura mínima 0 lo rompe en la Costa). El arreglo de fondo es tener rango óptimo y tolerable de FAO EcoCrop.
 - Si el radar vio agua en el terreno, ya no se le dice al arroz que "el suelo se seca rápido".
@@ -128,9 +133,30 @@ Clave `daule`. Recuadro: lon −80.05 a −79.65, lat −2.05 a −1.65. Órbita
 - **Tipo de terreno:** `python -m src.cobertura entrenar` entrena con todas las zonas que tengan serie, guarda `datos/procesados/modelo_cobertura.npz` y escribe la columna `cobertura` en cada tabla. Hay que **volver a ejecutarlo después de `nisar ZONA capas`** (ese comando no borra la columna, pero una zona nueva no la tendrá). Al integrar la Sierra, reentrenar con las tres zonas. Es no supervisado: los nombres salen de reglas y solo se comprobó con pueblos y la zona inundada.
 - El usuario pidió "entrenar una IA" con las pasadas para mejorar las recomendaciones. Se le explicó que no hay datos de campo (qué cultivo dio buen resultado y dónde), así que no se puede entrenar un modelo que acierte la recomendación; lo que sí se hizo es este modelo de tipo de terreno.
 - **Mercado:** `tablas/mercado.csv` con 6 cultivos nacionales 2024–2025, cifras comprobadas en el PDF de la ESPAC 2025 y en el boletín SIPA de diciembre 2025. Columnas nuevas opcionales `rendimiento_t_ha` y `rendimiento_producto`. La firma de `mercado()` no cambió. Ojo: el boletín SIPA imprime las variaciones con el signo al revés; se recalcularon desde los precios.
-- **EcoCrop:** `tablas/ecocrop_cultivos.csv` (15 cultivos, comprobados uno por uno en `ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=CODIGO`). **No se usa en el puntaje.** Simulación: mejora Santo Domingo (empates de 8 a 3) pero pone haba y maíz suave con 100 en Daule y baja la papa en la Sierra (71 a 3.000 m, 45 a 3.500 m). Decisión pendiente del equipo; hace falta un rango de altura del Ecuador (INIAP).
+- **EcoCrop:** `tablas/ecocrop_cultivos.csv` (15 cultivos, comprobados uno por uno en `ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=CODIGO`). **Desde las 17:00 sí se usa en el puntaje** (ver "Análisis por terreno"). Simulación anterior: mejora Santo Domingo (empates de 8 a 3) pero pone haba y maíz suave con 100 en Daule y baja la papa en la Sierra (71 a 3.000 m, 45 a 3.500 m). Decisión pendiente del equipo; hace falta un rango de altura del Ecuador (INIAP).
 - **Mercado por provincia: hecho** (ver la sección siguiente). Lo de este punto sobre "6 cultivos nacionales" y el boletín de diciembre quedó reemplazado.
 - La herramienta de lectura web de los subagentes dejó copias de los PDF y del CSV de EcoCrop (31 MB) en `C:\Users\PC\.claude\projects\C--condor\...\tool-results\`, fuera del repositorio.
+
+## Análisis por terreno (14 nov, 17:00)
+
+Pedido del usuario: "en cada zona que se pulsa nos da exactamente el mismo resultado"; quiere que el análisis use de verdad el terreno, los terrenos aledaños y cómo les ha ido a los cultivos cerca. Se midió y era cierto: 90 % de los terrenos de Santo Domingo y 98 % de los de Daule recibían el mismo top 3. Ahora el resultado más repetido es 27 % y 43 %.
+
+- **Orden de los comandos por zona:** `clima_relieve` → `nisar ... capas` → `suelo_lluvia` → `vecindad` → `cobertura entrenar`. `clima_relieve` vuelve a poner la lluvia de POWER: después hay que repetir `suelo_lluvia`.
+- **`src/suelo_lluvia.py`:** SoilGrids por WCS (`maps.isric.org/mapserv`, capas phh2o, clay, sand, soc; 0–30 cm ponderado; 12 KB por capa, guardadas en `datos/crudos/suelo/ZONA/`) y CHELSA V2.1 leído en remoto con rasterio `/vsicurl` (bio12 y pr_01..12, ~8 s por ventana). Valor del cuadro más cercano, sin interpolar. Escribe `ph`, `arcilla`, `arena`, `materia_organica`, `lluvia` (CHELSA) y `lluvia_power` (lo anterior), y `lluvia_mensual_ZONA.npz`. `rasterio` solo hace falta aquí; la app no lo importa. Fuera de Miniforge Prompt hay que definir `GDAL_DATA` o sale un aviso inofensivo.
+- **CHELSA frente a POWER:** Santo Domingo 2.861–4.965 mm (POWER 1.559); Daule 1.304–1.889 (POWER 770). No se comprobó con estaciones del INAMHI.
+- **Puntaje graduado (`src/aptitud.py`):** `cargar_requisitos()` une `requisitos_cultivos.csv` con `ecocrop_cultivos.csv` (columnas `temp_opt/abs`, `lluvia_opt/abs`, `ph_opt/abs`); `requisitos_cultivos.csv` no se tocó. Nota 1 en el rango ideal, 0 en el límite que aguanta. Si el cultivo no tiene esos rangos se usa la regla anterior (rango + margen). Altura y pendiente siguen como antes. La firma de `aptitud()` no cambió.
+- **Lluvia del ciclo:** en cultivos `ciclo_corto`, si la celda trae `lluvia_mensual` (12 números), se prueba cada mes de siembra y se toma el mejor. Sin ese dato usa la lluvia del año y llover de más no resta. A nivel nacional la app pasa la lluvia mensual de POWER.
+- **Constantes sin calibrar:** `PESO_EXCESO_LLUVIA = 0.5`, `AGUA_VECINOS_MAX = 0.5`, `AGUA_VECINOS_MINIMA = 0.05`, `BANDA_PUNTOS = 5`, `HECTAREAS_CON_EXPERIENCIA = 500`, `RADIO_VECINOS_M = 1000`.
+- **Andinos:** `ecocrop_cultivos.csv` tiene columnas `temp_opt_*_ecuador_C` y `fuente_ecuador` para haba (7–14 °C), maíz suave (10–20) y quinua (9–16), de Basantes (2015) vía el catálogo del equipo. Los cultivos con altura mínima ≥ 1.500 m sin ese dato (papa, tomate de árbol) **no** usan la temperatura de EcoCrop (`ALTURA_CULTIVO_ANDINO_M`). El catálogo solo da para la papa temperaturas de día y de noche, que no son la media: falta una fuente (INIAP). **Avisar al programador de la Sierra.**
+- **Se probaron y se descartaron** dos atajos para la lluvia de más: sin castigo, el maíz salía con 76 en Daule (donde hay 45 mil ha); quitando el castigo solo al ciclo corto salía primero en Santo Domingo con 3.500 mm. Por eso se hizo la lluvia del ciclo.
+- **Vecinos (`src/vecindad.py`):** `agua_vecinos` = parte de los cuadros a menos de 1 km con encharcamiento ≥ 5 % (sin contar el propio). Daule: 30 % de las celdas con algún vecino con agua, 19 % con más del 10 %, 9 % con más del 30 %. Santo Domingo: 0 %. `resumen_vecinos()` es para la pantalla.
+- **Provincia (`tablas/siembra_provincias.csv`):** la escribe `preparar_mercado`. `mercado.evidencia_local()` y `mercado.mas_sembrados()`. Santo Domingo: cacao 29.780 ha, plátano 17.784, piña 7.006, palma 5.937, yuca 4.323. Guayas: arroz 259.676, cacao 104.939, banano 75.858, maíz duro 45.313.
+- **Orden nuevo:** franja de 5 puntos → evidencia de la provincia → mercado → preferencia → puntaje exacto. El usuario había pedido antes mercado primero; se puso la provincia delante por este pedido y **está avisado**: si prefiere mercado primero, es cambiar el orden de dos claves en `evaluar_todos()`.
+- **Demos:** Santo Domingo → maíz duro 100, cacao 94, palma 91. Daule seco → plátano, palma, banano (100; arroz 78 sin riego, 96 con riego). Daule inundado → arroz 100 con o sin riego. Ya **no** hace falta marcar "Sí, tengo riego" en el terreno inundado.
+- **Catálogo del equipo v0.7.2** (`Downloads/SMARTSEEDS_catalogo_integrado_v07.2.json`, 1,9 MB, no copiado al repositorio): sus EcoCrop coinciden con los nuestros. Sus reglas dicen que nada es "regla automática validada" y que su uso previsto es contrastar con datos satelitales en otro módulo: decirlo así en la entrega.
+- **Archivo de estadísticas del equipo** (`CÓDIGO ESTADÍSTICAS AGROPECUARIAS.json`): sin fuentes; varias cifras no coinciden con la ESPAC ni con el SIPA (detalle en el README). No se usó. Pedir fuente y año.
+- **Probado en pantalla:** punto en Santo Domingo y terreno inundado de Daule. **Solo por código:** terreno dibujado (100 celdas junto a la zona inundada: arroz 100), nivel nacional, Daule seco.
+- **Idea pendiente:** el mapa de uso de la tierra del MAG (SIGTIERRAS) diría qué cultivo hay en cada terreno vecino. Hay que pedir permiso para descargarlo; no se sabe el tamaño.
 
 ## Mercado por provincia (14 nov, 15:00)
 
@@ -177,4 +203,7 @@ Analizados contra la app actual. Nada de esto está hecho todavía, salvo lo mar
 - La temperatura por celda se ajusta por altura con un gradiente fijo de 6,5 °C por km.
 - El umbral de agua (HH < −18 dB) y la escala de humedad (0,5 m³/m³ = saturado) son valores iniciales sin calibrar.
 - El análisis de NISAR cubre solo la época seca de 2026.
+- El suelo (SoilGrids) y la lluvia local (CHELSA) vienen de mapas mundiales hechos con modelos: son una orientación, no una medición del terreno. No son de la NASA.
+- Los rangos de los cultivos (FAO EcoCrop) son mundiales y el catálogo del equipo pide no tratarlos como reglas validadas. Los pesos de la lluvia de más, del agua en los vecinos y la franja de 5 puntos no están calibrados.
+- "Cómo les va a los cultivos cerca" es un dato de la provincia (ESPAC), no de los terrenos vecinos.
 - El mercado compara solo dos años (2024 y 2025); el dato por provincia de la ESPAC viene de una encuesta por muestreo y el precio nacional es un promedio simple entre provincias.

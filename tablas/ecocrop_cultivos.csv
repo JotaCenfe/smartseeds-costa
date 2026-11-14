@@ -1,16 +1,16 @@
-cultivo,codigo_ecocrop,nombre_ecocrop,temp_opt_min_C,temp_opt_max_C,temp_abs_min_C,temp_abs_max_C,lluvia_opt_min_mm,lluvia_opt_max_mm,lluvia_abs_min_mm,lluvia_abs_max_mm,altitud_max_m,ph_opt_min,ph_opt_max,ph_abs_min,ph_abs_max,ciclo_min_dias,ciclo_max_dias,drenaje_optimo,url
-cacao,2074,Theobroma cacao,21,32,10,38,1200,3000,900,7600,900,5,6.5,4,8,180,365,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=2074
-banano,7848,Musa acuminata,23,33,12,42,1200,3600,650,5000,2400,5.5,7.5,4,8.4,180,365,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=7848
-platano,7849,Musa acuminata x balbisiana,25,35,15,40,1400,2400,1000,5000,2400,5.5,6.5,4.5,8,180,365,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=7849
-palma_aceitera,972,Elaeis guineensis,20,35,12,38,1500,3000,1000,8000,1300,4.5,6,3.2,8,300,365,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=972
-cafe_robusta,750,Coffea canephora,20,30,12,36,1700,3000,900,4000,1300,5,6.3,4,8,270,300,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=750
-maracuya,1634,Passiflora edulis var. flavicarpa,25,32,15,36,1600,2000,1000,4000,2000,5.5,7.5,5,8,180,365,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=1634
-maiz_duro,2175,Zea mays,18,33,10,47,600,1200,400,1800,4000,5,7,4.5,8.5,65,365,,https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=2175
-maiz_suave,2175,Zea mays,18,33,10,47,600,1200,400,1800,4000,5,7,4.5,8.5,65,365,,https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=2175
-arroz,1574,Oryza sativa,20,30,10,36,1500,2000,1000,4000,2500,5.5,7,4.5,9,80,180,poorly (saturated >50% of year),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=1574
-yuca,1420,Manihot esculenta,20,29,10,35,1000,1500,500,5000,2000,5.5,8,4,9,180,365,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=1420
-pina,402,Ananas comosus,21,30,10,36,800,2500,550,3500,1800,4.5,8,3.5,9,330,365,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=402
-papa,1971,Solanum tuberosum,15,25,7,30,500,800,250,2000,2800,5,6.2,4.2,8.5,90,160,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=1971
-haba,2146,Vicia faba,18,28,5,32,650,1000,250,2600,2700,6,7,4.5,8.6,100,150,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=2146
-quinua,2509,Chenopodium quinoa,14,18,2,35,500,1000,250,2600,4000,5.5,8,4.5,9.5,90,240,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=2509
-tomate_de_arbol,859,Cyphomandra betacea,16,22,10,30,2000,2600,600,4000,2800,6.3,7,5.8,7.5,270,330,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=859
+cultivo,codigo_ecocrop,nombre_ecocrop,temp_opt_min_C,temp_opt_max_C,temp_abs_min_C,temp_abs_max_C,lluvia_opt_min_mm,lluvia_opt_max_mm,lluvia_abs_min_mm,lluvia_abs_max_mm,altitud_max_m,ph_opt_min,ph_opt_max,ph_abs_min,ph_abs_max,ciclo_min_dias,ciclo_max_dias,drenaje_optimo,url,temp_opt_min_ecuador_C,temp_opt_max_ecuador_C,fuente_ecuador
+cacao,2074,Theobroma cacao,21,32,10,38,1200,3000,900,7600,900,5,6.5,4,8,180,365,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=2074,,,
+banano,7848,Musa acuminata,23,33,12,42,1200,3600,650,5000,2400,5.5,7.5,4,8.4,180,365,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=7848,,,
+platano,7849,Musa acuminata x balbisiana,25,35,15,40,1400,2400,1000,5000,2400,5.5,6.5,4.5,8,180,365,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=7849,,,
+palma_aceitera,972,Elaeis guineensis,20,35,12,38,1500,3000,1000,8000,1300,4.5,6,3.2,8,300,365,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=972,,,
+cafe_robusta,750,Coffea canephora,20,30,12,36,1700,3000,900,4000,1300,5,6.3,4,8,270,300,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=750,,,
+maracuya,1634,Passiflora edulis var. flavicarpa,25,32,15,36,1600,2000,1000,4000,2000,5.5,7.5,5,8,180,365,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=1634,,,
+maiz_duro,2175,Zea mays,18,33,10,47,600,1200,400,1800,4000,5,7,4.5,8.5,65,365,,https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=2175,,,
+maiz_suave,2175,Zea mays,18,33,10,47,600,1200,400,1800,4000,5,7,4.5,8.5,65,365,,https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=2175,10,20,"Basantes Morales, E. R. (2015). Manejo de cultivos andinos del Ecuador. ESPE. Tomado del catálogo integrado del equipo v0.7.2 (fuente S01), p. 75"
+arroz,1574,Oryza sativa,20,30,10,36,1500,2000,1000,4000,2500,5.5,7,4.5,9,80,180,poorly (saturated >50% of year),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=1574,,,
+yuca,1420,Manihot esculenta,20,29,10,35,1000,1500,500,5000,2000,5.5,8,4,9,180,365,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=1420,,,
+pina,402,Ananas comosus,21,30,10,36,800,2500,550,3500,1800,4.5,8,3.5,9,330,365,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=402,,,
+papa,1971,Solanum tuberosum,15,25,7,30,500,800,250,2000,2800,5,6.2,4.2,8.5,90,160,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=1971,,,
+haba,2146,Vicia faba,18,28,5,32,650,1000,250,2600,2700,6,7,4.5,8.6,100,150,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=2146,7,14,"Basantes Morales, E. R. (2015). Manejo de cultivos andinos del Ecuador. ESPE. Tomado del catálogo integrado del equipo v0.7.2 (fuente S01), p. 28"
+quinua,2509,Chenopodium quinoa,14,18,2,35,500,1000,250,2600,4000,5.5,8,4.5,9.5,90,240,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=2509,9,16,"Basantes Morales, E. R. (2015). Manejo de cultivos andinos del Ecuador. ESPE. Tomado del catálogo integrado del equipo v0.7.2 (fuente S01), p. 84"
+tomate_de_arbol,859,Cyphomandra betacea,16,22,10,30,2000,2600,600,4000,2800,6.3,7,5.8,7.5,270,330,well (dry spells),https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id=859,,,

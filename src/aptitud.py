@@ -4,9 +4,14 @@ Aptitud física de un terreno para cada cultivo (0 a 100) y sus razones.
 Contrato:  aptitud(fila_celda, fila_cultivo) -> 0..100
 
 Cómo se calcula (regla inicial, fácil de explicar y de ajustar):
-  - Cada factor (altura, temperatura, lluvia, pendiente, encharcamiento, humedad)
-    recibe una nota de 0 a 1: vale 1 dentro del rango que necesita el cultivo y
-    baja en línea recta hasta 0 al alejarse (los MARGENES de abajo).
+  - Cada factor (altura, temperatura, lluvia, pendiente, acidez del suelo, encharcamiento,
+    agua en los terrenos vecinos, humedad) recibe una nota de 0 a 1.
+  - Temperatura, lluvia y acidez (pH) usan DOS rangos por cultivo (tablas/ecocrop_cultivos.csv):
+    el IDEAL, donde la nota es 1, y el que el cultivo AGUANTA, donde la nota llega a 0.
+    Entre uno y otro la nota baja en línea recta. Así dos terrenos parecidos ya no reciben
+    los dos un 100: recibe más el que está más cerca de lo ideal.
+  - Altura y pendiente: nota 1 dentro del rango y baja al alejarse (los MARGENES de abajo).
+    Si un cultivo no tiene los dos rangos, temperatura y lluvia también se calculan así.
   - Puntaje = 100 x (0,6 x la peor nota + 0,4 x el promedio).
     Así manda el factor limitante: de nada sirve la lluvia perfecta si hace frío.
   - Si falta un dato (por ejemplo, NISAR fuera de las zonas detalladas), ese
@@ -39,10 +44,64 @@ AGUA_VISIBLE = 0.05           # el terreno "tuvo agua" si el radar la vio en al 
 # El 0,5 es un valor inicial sin calibrar (declararlo como limitación).
 PESO_FALTA_AGUA_CON_RIEGO = 0.5
 
+# Lluvia de más. La lluvia del año por encima de lo ideal no mata al cultivo como la falta de agua:
+# el daño llega por el mal drenaje y las enfermedades, y eso ya se mide aparte (pendiente,
+# encharcamiento y humedad del radar). Por eso llover de más resta, como máximo, la mitad de la nota.
+# Valor inicial sin calibrar (declararlo como limitación).
+PESO_EXCESO_LLUVIA = 0.5
+
+# Cultivos de CICLO CORTO: ocupan el terreno pocos meses, así que no se comparan con la lluvia de
+# todo el año sino con la de los meses del cultivo (`ciclo_meses`), sembrando en el mes que más
+# conviene. Hace falta la lluvia de cada mes: celda["lluvia_mensual"], una lista de 12 números
+# (en las zonas detalladas viene de CHELSA; en el resto del país, de NASA POWER).
+# Si no está, se usa la lluvia del año y llover de más no resta (no se puede saber si sobra agua).
+MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+         "septiembre", "octubre", "noviembre", "diciembre"]
+
+# Agua en los terrenos vecinos (columna `agua_vecinos`, de src/vecindad.py): parte de los cuadros a
+# menos de 1 km donde el radar vio agua. Con la mitad de los vecinos con agua, un cultivo que no
+# soporta el encharcamiento recibe nota 0. Valor inicial sin calibrar.
+AGUA_VECINOS_MAX = 0.5
+AGUA_VECINOS_MINIMA = 0.05    # menos del 5 % de vecinos con agua se cuenta como "nada"
+
+ALTURA_CULTIVO_ANDINO_M = 1500   # un cultivo cuya altura mínima es esta o más se trata como andino
+
+COLUMNAS_RANGOS = ["temp_opt_min_C", "temp_opt_max_C", "temp_abs_min_C", "temp_abs_max_C",
+                   "lluvia_opt_min_mm", "lluvia_opt_max_mm", "lluvia_abs_min_mm", "lluvia_abs_max_mm",
+                   "ph_opt_min", "ph_opt_max", "ph_abs_min", "ph_abs_max"]
+
 
 def cargar_requisitos(ruta=None) -> pd.DataFrame:
-    """Lee tablas/requisitos_cultivos.csv."""
-    return pd.read_csv(ruta or TABLAS / "requisitos_cultivos.csv")
+    """Lee tablas/requisitos_cultivos.csv y le une los rangos ideal y tolerable de cada cultivo.
+
+    Los rangos vienen de tablas/ecocrop_cultivos.csv (fichas de FAO EcoCrop). En los cultivos
+    andinos que tienen un rango de temperatura del Ecuador (columnas `..._ecuador_C`, del catálogo
+    del equipo), ese rango reemplaza al ideal de EcoCrop, que es mundial.
+    """
+    requisitos = pd.read_csv(ruta or TABLAS / "requisitos_cultivos.csv")
+    ruta_rangos = TABLAS / "ecocrop_cultivos.csv"
+    if ruta is not None or not ruta_rangos.exists():
+        return requisitos
+    rangos = pd.read_csv(ruta_rangos)
+    if "temp_opt_min_ecuador_C" in rangos:
+        andino = rangos["temp_opt_min_ecuador_C"].notna() & rangos["temp_opt_max_ecuador_C"].notna()
+        rangos.loc[andino, "temp_opt_min_C"] = rangos.loc[andino, "temp_opt_min_ecuador_C"]
+        rangos.loc[andino, "temp_opt_max_C"] = rangos.loc[andino, "temp_opt_max_ecuador_C"]
+        # el rango que aguanta nunca puede ser más angosto que el ideal
+        rangos["temp_abs_min_C"] = rangos[["temp_abs_min_C", "temp_opt_min_C"]].min(axis=1)
+        rangos["temp_abs_max_C"] = rangos[["temp_abs_max_C", "temp_opt_max_C"]].max(axis=1)
+    else:
+        andino = pd.Series(False, index=rangos.index)
+    unidos = requisitos.merge(rangos[["cultivo"] + COLUMNAS_RANGOS], on="cultivo", how="left")
+    # Cultivos de altura (desde ALTURA_CULTIVO_ANDINO_M) SIN rango de temperatura del Ecuador:
+    # la temperatura de EcoCrop no se usa, porque es mundial y deja mal a la papa en los Andes
+    # (su ideal es 15–25 °C). Siguen con el rango de requisitos_cultivos.csv hasta tener una
+    # fuente ecuatoriana (INIAP).
+    con_rango_ecuador = set(rangos.loc[andino, "cultivo"])
+    de_altura = (pd.to_numeric(unidos["altitud_min_m"], errors="coerce") >= ALTURA_CULTIVO_ANDINO_M)
+    sin_fuente = de_altura & ~unidos["cultivo"].isin(con_rango_ecuador)
+    unidos.loc[sin_fuente, [c for c in COLUMNAS_RANGOS if c.startswith("temp_")]] = float("nan")
+    return unidos
 
 
 def _num(x):
@@ -90,6 +149,96 @@ def _factor_rango(nombre, unidad, valor, minimo, maximo, margen_bajo, margen_alt
     return {"factor": nombre, "nota": nota, "texto": texto}
 
 
+def _nota_optimo(valor, opt_min, opt_max, abs_min, abs_max, piso_alto=0.0):
+    """1 dentro del rango ideal; baja en línea recta hasta 0 en el límite que el cultivo aguanta.
+
+    `piso_alto` es la nota mínima cuando el valor se pasa por arriba (se usa en la lluvia de más).
+    """
+    if valor < opt_min:
+        return 0.0 if valor <= abs_min else (valor - abs_min) / (opt_min - abs_min)
+    if valor > opt_max:
+        if valor >= abs_max:
+            return piso_alto
+        return 1 - (1 - piso_alto) * (valor - opt_max) / (abs_max - opt_max)
+    return 1.0
+
+
+def _factor_optimo(nombre, unidad, valor, rango, palabras, decimales=0, piso_alto=0.0, consejo_alto=""):
+    """Factor con rango ideal y rango que aguanta. `rango` = (opt_min, opt_max, abs_min, abs_max).
+
+    `palabras` = (poco, muy poco, mucho, demasiado): cómo se dice cada caso en lenguaje sencillo.
+    """
+    if valor is None:
+        return {"factor": nombre, "nota": None, "texto": f"{nombre}: sin dato para este punto"}
+    opt_min, opt_max, abs_min, abs_max = rango
+    nota = _nota_optimo(valor, opt_min, opt_max, abs_min, abs_max, piso_alto)
+    poco, muy_poco, mucho, demasiado = palabras
+    v = f"{valor:.{decimales}f} {unidad}".strip()
+    ideal = f"lo mejor es {opt_min:g}–{opt_max:g} {unidad}".strip()
+    if opt_min <= valor <= opt_max:
+        texto = f"{nombre} {v}: ideal para este cultivo ({ideal})"
+    elif valor < opt_min and valor > abs_min:
+        texto = f"{nombre} {v}: {poco}. El cultivo se da, pero no en su mejor condición ({ideal}; aguanta desde {abs_min:g})"
+    elif valor < opt_min:
+        texto = f"{nombre} {v}: {muy_poco} para este cultivo (aguanta desde {abs_min:g} {unidad})".replace(" )", ")")
+    elif valor < abs_max:
+        texto = f"{nombre} {v}: {mucho}. El cultivo se da, pero no en su mejor condición ({ideal}; aguanta hasta {abs_max:g})"
+        texto += consejo_alto
+    else:
+        texto = f"{nombre} {v}: {demasiado} para este cultivo (aguanta hasta {abs_max:g} {unidad})".replace(" )", ")")
+        texto += consejo_alto
+    return {"factor": nombre, "nota": nota, "texto": texto}
+
+
+def _lluvia_del_ciclo(celda: dict, cultivo: dict, rango, riego: bool) -> dict | None:
+    """Factor de lluvia de un cultivo de ciclo corto: la lluvia de sus meses, en la mejor época.
+
+    Prueba sembrar en cada uno de los 12 meses, suma la lluvia de los meses que dura el cultivo
+    y se queda con el mes de siembra que da la mejor nota. Devuelve None si no aplica (el cultivo
+    no es de ciclo corto o falta la lluvia mensual): entonces se usa la lluvia del año.
+    """
+    if str(cultivo.get("tipo", "")).strip().lower() != "ciclo_corto":
+        return None
+    mensual, meses = celda.get("lluvia_mensual"), _num(cultivo.get("ciclo_meses"))
+    if not isinstance(mensual, (list, tuple)) or len(mensual) != 12 or meses is None:
+        return None
+    mensual, meses = [_num(v) for v in mensual], int(round(meses))
+    if None in mensual or not 1 <= meses <= 11:
+        return None
+    opt_min, opt_max, abs_min, abs_max = rango
+    mejor = None
+    for inicio in range(12):
+        total = sum(mensual[(inicio + k) % 12] for k in range(meses))
+        nota = _nota_optimo(total, opt_min, opt_max, abs_min, abs_max)
+        if riego and total < opt_min:     # con riego la falta de agua resta menos (regla del riego)
+            nota = 1 - PESO_FALTA_AGUA_CON_RIEGO * (opt_min - total) / opt_min
+        if mejor is None or nota > mejor[0] + 1e-9:
+            mejor = (nota, inicio, total)
+    nota, inicio, total = mejor
+    cuando = f"Lluvia: sembrando en {MESES[inicio]}, en los {meses} meses del cultivo caen unos {total:.0f} mm"
+    ideal = f"lo mejor es {opt_min:g}–{opt_max:g} mm en el ciclo"
+    if opt_min <= total <= opt_max:
+        texto = f"{cuando}: ideal para este cultivo ({ideal})"
+    elif total < opt_min and riego:
+        texto = (f"{cuando}: no alcanza ({ideal}). Con tu riego sí se puede, pero tendrás que regar "
+                 f"lo que falta: unos {opt_min - total:.0f} mm en el ciclo")
+    elif total < opt_min and total > abs_min:
+        texto = f"{cuando}: llueve menos de lo ideal ({ideal}; aguanta desde {abs_min:g}). Con riego mejoraría"
+    elif total < opt_min:
+        texto = f"{cuando}: llueve demasiado poco para este cultivo sin riego (aguanta desde {abs_min:g} mm)"
+    else:
+        texto = (f"{cuando}: llueve más de lo ideal incluso en la mejor época ({ideal}; aguanta hasta "
+                 f"{abs_max:g}). Hace falta buen drenaje")
+    return {"factor": "Lluvia", "nota": nota, "texto": texto}
+
+
+def _rango_graduado(cultivo: dict, prefijo: str, sufijo: str):
+    """(opt_min, opt_max, abs_min, abs_max) de un cultivo, o None si falta alguno de los cuatro."""
+    valores = tuple(_num(cultivo.get(f"{prefijo}_{parte}{sufijo}"))
+                    for parte in ("opt_min", "opt_max", "abs_min", "abs_max"))
+    return None if None in valores else valores
+
+
 def aptitud_detalle(celda: dict, cultivo: dict) -> dict:
     """Puntaje y explicación. Devuelve {"puntaje": 0..100 o None, "factores": [...]}."""
     alt_min, alt_max = _num(cultivo.get("altitud_min_m")), _num(cultivo.get("altitud_max_m"))
@@ -99,26 +248,56 @@ def aptitud_detalle(celda: dict, cultivo: dict) -> dict:
     tolera = str(cultivo.get("tolera_encharcamiento", "")).strip().lower()
     drenaje = str(cultivo.get("necesita_drenaje", "")).strip().lower()
 
-    factores = [
-        _factor_rango("Altura", "m", _num(celda.get("altura")), alt_min, alt_max,
-                      MARGEN_ALTURA_M, MARGEN_ALTURA_M, "muy baja", "muy alta"),
-        _factor_rango("Temperatura", "°C", _num(celda.get("temp")), t_min, t_max,
-                      MARGEN_TEMP_C, MARGEN_TEMP_C, "muy frío", "muy caliente", decimales=1),
-        _factor_rango("Lluvia", "mm/año", _num(celda.get("lluvia")), ll_min, ll_max,
-                      (ll_min or 1) * MARGEN_LLUVIA, (ll_max or 1) * MARGEN_LLUVIA,
-                      "llueve poco", "llueve demasiado"),
-    ]
+    rango_temp = _rango_graduado(cultivo, "temp", "_C")
+    rango_lluvia = _rango_graduado(cultivo, "lluvia", "_mm")
+    rango_ph = _rango_graduado(cultivo, "ph", "")
 
-    # Riego: si la lluvia no alcanza pero hay riego, la falta resta menos (ver regla arriba)
+    factores = [_factor_rango("Altura", "m", _num(celda.get("altura")), alt_min, alt_max,
+                              MARGEN_ALTURA_M, MARGEN_ALTURA_M, "muy baja", "muy alta")]
+    if rango_temp:
+        factores.append(_factor_optimo(
+            "Temperatura", "°C", _num(celda.get("temp")), rango_temp,
+            ("algo fría", "demasiado fría", "algo caliente", "demasiado caliente"), decimales=1))
+    else:
+        factores.append(_factor_rango("Temperatura", "°C", _num(celda.get("temp")), t_min, t_max,
+                                      MARGEN_TEMP_C, MARGEN_TEMP_C, "muy frío", "muy caliente", decimales=1))
     riego = celda.get("riego") is True
     lluvia = _num(celda.get("lluvia"))
-    if riego and lluvia is not None and ll_min is not None and lluvia < ll_min:
+    lluvia_del_ciclo = _lluvia_del_ciclo(celda, cultivo, rango_lluvia, riego) if rango_lluvia else None
+    if lluvia_del_ciclo:
+        factores.append(lluvia_del_ciclo)
+    elif rango_lluvia:
+        ciclo_corto = str(cultivo.get("tipo", "")).strip().lower() == "ciclo_corto"
+        factores.append(_factor_optimo(
+            "Lluvia", "mm/año", _num(celda.get("lluvia")), rango_lluvia,
+            ("llueve menos de lo ideal", "llueve demasiado poco", "llueve más de lo ideal",
+             "llueve mucho más de lo que conviene"),
+            piso_alto=1.0 if ciclo_corto else 1 - PESO_EXCESO_LLUVIA,
+            consejo_alto=(". Como es de ciclo corto, se puede sembrar en los meses menos lluviosos" if ciclo_corto
+                          else ". Hace falta buen drenaje y hay más riesgo de enfermedades")))
+        ll_min = rango_lluvia[0]      # con riego, la falta de agua se mide contra la lluvia ideal
+    else:
+        factores.append(_factor_rango("Lluvia", "mm/año", _num(celda.get("lluvia")), ll_min, ll_max,
+                                      (ll_min or 1) * MARGEN_LLUVIA, (ll_max or 1) * MARGEN_LLUVIA,
+                                      "llueve poco", "llueve demasiado"))
+
+    # Riego: si la lluvia no alcanza pero hay riego, la falta resta menos (ver regla arriba)
+    if not lluvia_del_ciclo and riego and lluvia is not None and ll_min is not None and lluvia < ll_min:
         falta = ll_min - lluvia
         factores[-1] = {
             "factor": "Lluvia", "nota": 1 - PESO_FALTA_AGUA_CON_RIEGO * falta / ll_min,
             "texto": f"Lluvia {lluvia:.0f} mm/año: no alcanza (necesita mínimo {ll_min:g} mm/año). "
                      f"Con tu riego sí se puede, pero tendrás que regar lo que falta: "
                      f"unos {falta:.0f} mm al año"}
+
+    # Si la lluvia no alcanza pero el radar vio agua sobre el terreno y el cultivo vive en el agua
+    # (arroz), el agua ya está ahí: la falta de lluvia no resta.
+    agua_vista = _num(celda.get("encharcamiento"))
+    if (tolera == "si" and agua_vista is not None and agua_vista >= AGUA_VISIBLE
+            and factores[-1]["nota"] is not None and factores[-1]["nota"] < 1):
+        factores[-1] = {"factor": "Lluvia", "nota": 1.0,
+                        "texto": "Lluvia: la lluvia sola no alcanza para este cultivo, pero el radar vio agua "
+                                 f"sobre el terreno en {agua_vista:.0%} de las pasadas: el agua ya está ahí"}
 
     # Pendiente: solo tiene máximo
     pendiente = _num(celda.get("pendiente"))
@@ -130,6 +309,16 @@ def aptitud_detalle(celda: dict, cultivo: dict) -> dict:
         texto = (f"Pendiente {pendiente:.0f}°: adecuada (máximo {pen_max:g}°)" if nota >= 1 else
                  f"Pendiente {pendiente:.0f}°: terreno muy inclinado (máximo {pen_max:g}°)")
         factores.append({"factor": "Pendiente", "nota": nota, "texto": texto})
+
+    # Acidez del suelo (pH del mapa SoilGrids, columna `ph`): rango ideal y rango que aguanta
+    ph = _num(celda.get("ph"))
+    if rango_ph and ph is not None:
+        factores.append(_factor_optimo(
+            "Suelo: pH", "", ph, rango_ph,
+            ("algo ácido", "demasiado ácido", "algo alcalino", "demasiado alcalino"), decimales=1))
+    elif rango_ph:
+        factores.append({"factor": "Suelo: pH", "nota": None,
+                         "texto": "Suelo: sin dato de acidez (pH) para este punto"})
 
     # Encharcamiento (NISAR): fracción de fechas en que el terreno tuvo agua
     ench = _num(celda.get("encharcamiento"))
@@ -146,6 +335,24 @@ def aptitud_detalle(celda: dict, cultivo: dict) -> dict:
         else:
             texto = f"Encharcamiento: el radar vio agua {ench:.0%} de las fechas; este cultivo no lo soporta bien"
         factores.append({"factor": "Encharcamiento", "nota": nota, "texto": texto})
+
+    # Agua en los terrenos vecinos (NISAR): parte de los cuadros a menos de 1 km con agua.
+    # Los datos del radar son de la época seca: si los vecinos tuvieron agua entonces,
+    # en invierno el terreno también puede mojarse.
+    vecinos = _num(celda.get("agua_vecinos"))
+    if vecinos is not None:
+        if vecinos < AGUA_VECINOS_MINIMA:
+            factores.append({"factor": "Alrededores", "nota": 1.0,
+                             "texto": "Alrededores: el radar casi no vio agua en los terrenos vecinos (a menos de 1 km)"})
+        elif tolera == "si":
+            factores.append({"factor": "Alrededores", "nota": 1.0,
+                             "texto": f"Alrededores: el radar vio agua en {vecinos:.0%} de los terrenos vecinos; "
+                                      "es zona de agua, buena para este cultivo"})
+        else:
+            limite_vecinos = AGUA_VECINOS_MAX * (2 if tolera == "parcial" else 1)
+            factores.append({"factor": "Alrededores", "nota": max(0.0, 1 - vecinos / limite_vecinos),
+                             "texto": f"Alrededores: el radar vio agua en {vecinos:.0%} de los terrenos vecinos "
+                                      "(a menos de 1 km). En invierno tu terreno también puede mojarse"})
 
     # Humedad del suelo (NISAR): 0 = seco, 1 = saturado
     # `humedad_confiable` = fracción de los datos que la NASA marca como recomendados.

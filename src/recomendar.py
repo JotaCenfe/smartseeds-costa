@@ -4,12 +4,16 @@ Une aptitud física + mercado y devuelve la recomendación.
 Contrato:  recomendar(celda, provincia) -> lista de cultivos ordenada por puntaje,
            cada uno con puntaje, razones en texto y nivel de mercado.
 
-Empates: muchos cultivos pueden sacar el mismo puntaje (por ejemplo, varios con 100).
-Para que el orden no dependa de la posición en la tabla, los empatados se ordenan así:
-  1. mejor mercado primero (alta, media, sin datos, saturado);
-  2. lo que el agricultor prefiera: "pronto" = primero el que da cosecha más rápido;
+Orden: primero la aptitud del terreno, por franjas de BANDA_PUNTOS puntos. Los datos no tienen
+precisión para decir que un cultivo con 97 es mejor que uno con 96, así que los que caen en la
+misma franja se consideran igual de aptos y se ordenan así:
+  1. el que se siembra y rinde bien en la provincia (evidencia de la ESPAC): es lo más
+     parecido que hay a "cómo les ha ido a los vecinos";
+  2. mejor mercado primero (alta, media, sin datos, saturado);
+  3. lo que el agricultor prefiera: "pronto" = primero el que da cosecha más rápido;
      "largo" = primero los cultivos permanentes (producen muchos años).
-El puntaje NO cambia con la preferencia: solo decide el orden entre empatados.
+El puntaje NO cambia con el mercado, la provincia ni la preferencia: solo deciden el orden
+entre cultivos de la misma franja.
 """
 from __future__ import annotations
 
@@ -19,9 +23,17 @@ import pandas as pd
 
 from .aptitud import _num, aptitud_detalle, cargar_requisitos
 from .config import TABLAS
-from .mercado import cargar_mercado, mercado_detalle
+from .mercado import cargar_mercado, cargar_siembra, evidencia_local, mercado_detalle
 
 PUNTAJE_MINIMO = 40   # por debajo de esto no se recomienda el cultivo
+BANDA_PUNTOS = 5      # cultivos con menos de esta diferencia de puntaje se consideran igual de aptos
+
+ORDEN_EVIDENCIA = {"fuerte": 0, "presente": 1, "sin_datos": 2, "poca": 3}
+
+
+def banda(puntaje: float) -> int:
+    """Franja de aptitud a la que pertenece un puntaje (múltiplos de BANDA_PUNTOS)."""
+    return int(round(puntaje / BANDA_PUNTOS) * BANDA_PUNTOS)
 
 ORDEN_MERCADO = {"alta": 0, "media": 1, "sin_datos": 2, "saturado": 3}
 ORDEN_TIPO_LARGO = {"permanente": 0, "semipermanente": 1, "ciclo_corto": 2}
@@ -112,31 +124,34 @@ def _clave_preferencia(cultivo: dict, preferencia: str) -> tuple:
 
 
 def empatados(todos: list[dict], n: int = 3) -> list[dict]:
-    """Cultivos que quedaron fuera de los n primeros pero tienen su mismo puntaje (redondeado)."""
+    """Cultivos que quedaron fuera de los n primeros pero están en su misma franja de aptitud."""
     if len(todos) <= n or todos[n - 1]["puntaje"] < PUNTAJE_MINIMO:
         return []
-    corte = round(todos[n - 1]["puntaje"])
-    return [c for c in todos[n:] if round(c["puntaje"]) == corte]
+    corte = banda(todos[n - 1]["puntaje"])
+    return [c for c in todos[n:] if banda(c["puntaje"]) == corte and c["puntaje"] >= PUNTAJE_MINIMO]
 
 
 def evaluar_todos(celda: dict, provincia: str, requisitos: pd.DataFrame | None = None,
                   tabla_mercado: pd.DataFrame | None = None,
                   tabla_suelo: pd.DataFrame | None = None,
-                  preferencia: str = "pronto") -> list[dict]:
+                  preferencia: str = "pronto",
+                  tabla_siembra: pd.DataFrame | None = None) -> list[dict]:
     """Evalúa todos los cultivos de la tabla para un terreno. Ordenados de mejor a peor.
 
-    `preferencia` ("pronto" o "largo") solo ordena a los que empatan en puntaje.
+    `preferencia` ("pronto" o "largo") solo ordena a los que caen en la misma franja de aptitud.
     Si el agricultor tiene riego, se indica en la celda: celda["riego"] = True.
     """
     requisitos = cargar_requisitos() if requisitos is None else requisitos
     tabla_mercado = cargar_mercado() if tabla_mercado is None else tabla_mercado
     tabla_suelo = cargar_suelo() if tabla_suelo is None else tabla_suelo
+    tabla_siembra = cargar_siembra() if tabla_siembra is None else tabla_siembra
     salida = []
     for _, cultivo in requisitos.iterrows():
         det = aptitud_detalle(celda, cultivo.to_dict())
         if det["puntaje"] is None:
             continue
         m = mercado_detalle(cultivo["cultivo"], provincia, tabla_mercado)
+        evidencia = evidencia_local(cultivo["cultivo"], provincia, tabla_siembra)
         salida.append({
             "cultivo": cultivo["cultivo"],
             "nombre": NOMBRES.get(cultivo["cultivo"],
@@ -149,15 +164,19 @@ def evaluar_todos(celda: dict, provincia: str, requisitos: pd.DataFrame | None =
             "mercado_texto": m["texto"],
             "rendimiento_texto": m.get("rendimiento"),       # None si no hay dato de rendimiento
             "mercado_fuente": m.get("fuente"),
+            "evidencia": evidencia["nivel"],                 # se siembra o no en la provincia (ESPAC)
+            "evidencia_texto": evidencia["texto"],
             "meses": _num(cultivo.get("ciclo_meses")),       # meses hasta la primera cosecha
             "tiempo_texto": tiempo_texto(cultivo.to_dict()),
             "_desempate": _clave_preferencia(cultivo.to_dict(), preferencia),
             # Suelo que prefiere el cultivo (referencia; None si el catálogo no lo tiene)
             "suelo": suelo_detalle(cultivo["cultivo"], tabla_suelo),
         })
-    # Puntaje redondeado (así se muestra); luego mercado; luego la preferencia del agricultor
-    return sorted(salida, key=lambda c: (-round(c["puntaje"]), ORDEN_MERCADO.get(c["mercado"], 2),
-                                         c["_desempate"]))
+    # Franja de aptitud; luego lo que se siembra en la provincia; luego mercado; luego la
+    # preferencia del agricultor; al final, el puntaje exacto
+    return sorted(salida, key=lambda c: (-banda(c["puntaje"]), ORDEN_EVIDENCIA.get(c["evidencia"], 2),
+                                         ORDEN_MERCADO.get(c["mercado"], 2), c["_desempate"],
+                                         -c["puntaje"]))
 
 
 def reparto_mejor_cultivo(celdas: pd.DataFrame, requisitos: pd.DataFrame | None = None,
@@ -187,8 +206,8 @@ def reparto_mejor_cultivo(celdas: pd.DataFrame, requisitos: pd.DataFrame | None 
             puntaje = aptitud_detalle(fila, cultivo)["puntaje"]
             if puntaje is None or puntaje < PUNTAJE_MINIMO:
                 continue
-            # en un empate (mismo puntaje redondeado) gana el primero según la preferencia
-            if mejor_puntaje is None or round(puntaje) > round(mejor_puntaje):
+            # en un empate (misma franja de aptitud) gana el primero según la preferencia
+            if mejor_puntaje is None or banda(puntaje) > banda(mejor_puntaje):
                 mejor, mejor_puntaje = cultivo["cultivo"], puntaje
         cuenta[mejor] = cuenta.get(mejor, 0) + peso
     total = sum(cuenta.values())

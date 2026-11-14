@@ -248,6 +248,8 @@ streamlit run app/app.py             # abre la app en http://localhost:8501
 | `app/app.py` | Mapa: tocas un terreno y muestra los 3 mejores cultivos con sus razones. Nivel nacional con clima real de NASA POWER. |
 | `src/terreno.py` | **Terreno dibujado.** En la app se elige "✏️ Dibujar mi terreno" y se marcan las esquinas (todas las que hagan falta, para seguir curvas y linderos). Con el botón ✎ se arrastran las esquinas para corregir y se crean esquinas nuevas desde los puntos medios. Calcula el tamaño en hectáreas y cuadras y **pesa cada cuadro de datos (~250 m) según la parte que el terreno ocupa de él**, así el resultado sigue la forma dibujada. Si el terreno es grande, dice qué cultivo conviene en cada parte. Un terreno que cabe en un solo cuadro (~6 ha) usa ese cuadro: los datos no tienen más detalle. |
 | `src/cobertura.py` | **Tipo de terreno según el radar.** Un modelo de agrupamiento (KMeans) entrenado con las pasadas de NISAR separa: zona construida, agua, terreno que se inunda, cultivo de ciclo corto en actividad, árboles o vegetación densa y vegetación baja. La app lo muestra, avisa si el punto es zona construida y deja lo construido fuera del análisis de un terreno dibujado. |
+| `src/suelo_lluvia.py` | **Suelo y lluvia con detalle local.** Agrega a la tabla el pH y la textura de SoilGrids (250 m) y la lluvia de CHELSA (1 km, del año y de cada mes). |
+| `src/vecindad.py` | **Los terrenos vecinos.** Calcula cuántos cuadros a menos de 1 km tuvieron agua según el radar y resume qué hay alrededor de un terreno. |
 | `src/config.py` | Rutas, zonas de demostración y formato de la tabla por celda. **Aquí se agrega la zona de la Sierra.** |
 | `src/aptitud.py` | Puntaje 0–100 por cultivo y razones en lenguaje sencillo. Incluye la regla del **riego** (ver abajo). |
 | `src/mercado.py` | Regla alta / media / saturado sobre `tablas/mercado.csv`. Usa la fila de la provincia y, si no hay, la nacional. Devuelve "sin datos" si el cultivo no está. |
@@ -282,6 +284,86 @@ La app hace dos preguntas sencillas al agricultor antes de recomendar.
 - Cada cultivo muestra cuánto tarda la primera cosecha y de qué tipo es (columnas `ciclo_meses` y `tipo`
   de `requisitos_cultivos.csv`, todavía **preliminares**). No hay datos de costos: solo se dice que un
   cultivo permanente suele pedir más inversión al inicio.
+
+### El análisis ya depende del terreno (14 nov, 17:00)
+
+**El problema.** Se midió con 500 terrenos al azar por zona: en Santo Domingo el 90 % recibía exactamente
+los mismos tres cultivos, y en Daule el 98 %. Causas: la lluvia de NASA POWER es un solo número para toda
+la zona (su celda mide ~50 km), la app no sabía nada del suelo y el puntaje daba 100 a todo lo que cayera
+dentro de un rango ancho. Después de los cambios, el resultado más repetido baja al **27 %** de los
+terrenos en Santo Domingo y al **43 %** en Daule.
+
+**1. Datos con detalle local** (`python -m src.suelo_lluvia ZONA`; no son de la NASA: hay que citarlos)
+| Dato | Fuente | Detalle | Santo Domingo | Daule |
+|---|---|---|---|---|
+| Lluvia del año y de cada mes | CHELSA V2.1, promedio 1981–2010 | ~1 km | 2.861–4.965 mm | 1.304–1.889 mm |
+| pH del suelo (0–30 cm) | SoilGrids 2.0 (ISRIC), CC BY 4.0 | 250 m | 4,8–6,1 | 5,6–6,6 |
+| Textura (arena y arcilla) | SoilGrids 2.0 | 250 m | 87 % franco arcilloso | franco arcilloso y franco arcillo arenoso |
+- NASA POWER marcaba 1.559 mm para todo Santo Domingo y 770 mm para todo Daule: cerca de la mitad. La
+  tabla conserva ese valor en la columna `lluvia_power`; la columna `lluvia` ahora es la de CHELSA.
+- No se bajó ningún archivo grande: de SoilGrids se pide solo el recuadro (12 KB por capa; quedan en
+  `datos/crudos/suelo/`) y de CHELSA se lee en remoto solo la ventana de la zona.
+- Columnas nuevas de la tabla por celda: `ph`, `arcilla`, `arena`, `materia_organica`, `lluvia_power`,
+  `agua_vecinos`. La lluvia mensual va aparte, en `datos/procesados/lluvia_mensual_ZONA.npz`.
+
+**2. Puntaje graduado** (`src/aptitud.py`)
+- Temperatura, lluvia y pH usan dos rangos por cultivo, de las fichas de FAO EcoCrop
+  (`tablas/ecocrop_cultivos.csv`): el **ideal** (nota 1) y el que el cultivo **aguanta** (nota 0). Entre
+  uno y otro la nota baja en línea recta. Antes cualquier valor dentro del rango valía 100.
+- **Cultivos de ciclo corto** (maíz, arroz, yuca, papa...): la lluvia se compara con la de los meses del
+  cultivo, sembrando en el mes que más conviene, y no con la de todo el año. Es como lo hace el modelo
+  EcoCrop, y el catálogo del equipo pide no comparar la lluvia del año con la del ciclo.
+- **Llover de más** (cultivos permanentes) resta como máximo la mitad de la nota: el daño llega por el
+  drenaje y las enfermedades, que ya se miden aparte. Valor inicial sin calibrar (`PESO_EXCESO_LLUVIA`).
+- **Arroz:** si la lluvia no alcanza pero el radar vio agua sobre el terreno, la falta de lluvia no resta.
+- **Cultivos andinos:** haba, maíz suave y quinua usan como ideal el rango de temperatura del Ecuador
+  (Basantes, 2015, *Manejo de cultivos andinos del Ecuador*, tomado del catálogo del equipo). La papa y el
+  tomate de árbol no tienen ese dato: siguen con el rango preliminar de `requisitos_cultivos.csv`, porque el
+  ideal mundial de EcoCrop para la papa (15–25 °C) la deja mal en los Andes. **Pendiente para la Sierra.**
+
+**3. Los terrenos vecinos** (`python -m src.vecindad ZONA`)
+- Columna `agua_vecinos`: parte de los cuadros a menos de 1 km donde el radar vio agua. Cuenta en el
+  puntaje: el radar solo tiene pasadas de la época seca, así que si los vecinos tuvieron agua, el terreno
+  puede mojarse en invierno. En Daule el 19 % de los cuadros tiene agua en más del 10 % de sus vecinos.
+- La app muestra además qué tipo de terreno hay alrededor y si el terreno está más alto o más bajo.
+
+**4. Lo que se siembra en la provincia** (`tablas/siembra_provincias.csv`, 443 filas, ESPAC 2025)
+- Por cada cultivo y provincia: hectáreas sembradas y rendimiento frente al promedio del país. Es lo más
+  cercano que existe a "cómo les ha ido a los vecinos": la ESPAC no baja de la provincia.
+- Niveles: se siembra y rinde bien / se siembra pero rinde menos / casi no se siembra (menos de 500 ha).
+- No cambia el puntaje. **Ordena** a los cultivos de aptitud parecida (ver abajo).
+
+**5. Nuevo orden** (`src/recomendar.py`). Primero la aptitud, por franjas de 5 puntos (los datos no
+alcanzan para decir que 97 es mejor que 96). Dentro de una franja: primero el que se siembra y rinde bien
+en la provincia, luego el de mejor mercado y al final la respuesta a "¿Qué buscas?".
+
+**Terrenos de demostración**
+| Terreno | Antes | Ahora |
+|---|---|---|
+| Santo Domingo `?lat=-0.33&lon=-79.12` | maracuyá, plátano, maíz duro (todos 100) | maíz duro 100, cacao 94, palma 91 |
+| Daule seco `?lat=-1.8156&lon=-79.6733` | maíz duro 100, maracuyá 92, yuca 92 | plátano, palma y banano 100 (también maíz duro, cacao y piña); arroz 78 sin riego y 96 con riego |
+| Daule inundado `?lat=-1.9356&lon=-79.6511` | arroz 49 sin riego, 92 con riego | arroz 100 con o sin riego (el radar vio el agua); los demás, 30 |
+
+**Límites que hay que declarar**
+- SoilGrids es un mapa mundial hecho con un modelo, no un análisis del suelo del terreno. CHELSA es un
+  promedio de 30 años y parece dar algo más de lluvia que las estaciones (no se comprobó con el INAMHI).
+- EcoCrop es mundial. El catálogo del equipo pide no tratar sus rangos como reglas automáticas validadas:
+  la app los usa como orientación y así debe decirse.
+- En Daule seco muchos cultivos siguen empatados en 100: el clima sirve para casi todos y lo que decide
+  es la provincia y el mercado.
+- No hay datos de qué cultivo hay en cada terreno vecino ni de cómo le fue. Para eso haría falta el mapa
+  de uso de la tierra del MAG (SIGTIERRAS), que no se ha descargado.
+
+**Archivos del equipo revisados (14 nov)**
+- `SMARTSEEDS_catalogo_integrado_v07.2.json` (20 cultivos, 123 fuentes): sus rangos de EcoCrop de cacao,
+  maíz, quinua, papa, yuca y haba son idénticos a los de `tablas/ecocrop_cultivos.csv`. De ahí salieron
+  los rangos andinos. El archivo no se copió al repositorio.
+- `CÓDIGO ESTADÍSTICAS AGROPECUARIAS.json` (20 cultivos, sin fuentes): **no se usó en la app.** Coinciden
+  con los datos oficiales la producción de cacao 2025, la superficie de papa 2025, rosas y claveles 2025 y
+  los precios de la soya y del cacao CCN51. No coinciden la producción de papa 2025 (200.000 t frente a
+  229.371 t de la ESPAC), la de maíz duro 2021 (319.823 t frente a 1.699.370 t) ni los precios del maíz
+  duro y del cacao fino de aroma de 2021. Las cifras de crédito público parecen estar en otra unidad. El
+  comercio exterior no se pudo comprobar. Hace falta la fuente y el año de cada cifra.
 
 ### Vista satelital, tipo de terreno, mercado y EcoCrop (14 nov, tarde)
 
@@ -357,7 +439,7 @@ Santo Domingo (−0,8 % de superficie); el maíz duro es "media" en el país y "
 
 **FAO EcoCrop** (`tablas/ecocrop_cultivos.csv`): rangos óptimos y absolutos de temperatura, lluvia y pH,
 altitud máxima y ciclo de los 15 cultivos, copiados de la ficha oficial de cada uno
-(`ecocrop.apps.fao.org`, licencia CC BY 4.0). **Todavía no se usan en el puntaje.** Una simulación mostró:
+(`ecocrop.apps.fao.org`, licencia CC BY 4.0). **Desde las 17:00 del 14 nov sí se usan en el puntaje** (ver la sección anterior). La primera simulación, hecha antes, había mostrado:
 - En Santo Domingo los empates en 100 bajan de 8 a 3 (cacao, palma, piña), lo que mejora el resultado.
 - Pero EcoCrop es mundial: sin un límite de altura propio del Ecuador pone haba y maíz suave con 100 en
   Daule, y baja la papa a 71 a 3.000 m y a 45 a 3.500 m. Por eso no se adoptó sin acuerdo del equipo.

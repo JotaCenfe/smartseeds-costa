@@ -11,8 +11,12 @@ dos archivos del Sistema de Información Pública Agropecuaria (SIPA) del MAG:
         https://sipa.agricultura.gob.ec/descargas/base-estadistica/modulo_economico/precios-productor-ponderado.xlsx
 
 Uso:
-    python -m src.preparar_mercado            # escribe tablas/mercado.csv
+    python -m src.preparar_mercado            # escribe tablas/mercado.csv y tablas/siembra_provincias.csv
     python -m src.preparar_mercado ver        # solo muestra el resultado, no escribe nada
+
+Además escribe tablas/siembra_provincias.csv: cuántas hectáreas de cada cultivo de la ESPAC hay en
+cada provincia y cuánto rinde ahí frente al promedio del país. La app lo usa para decir qué se
+siembra cerca del agricultor y cómo le va a cada cultivo en su provincia.
 
 Cómo se calcula cada fila (un cultivo en el país o en una provincia):
   var_superficie_pct  cambio de la superficie plantada o sembrada entre 2024 y 2025 (ESPAC).
@@ -221,8 +225,39 @@ def armar_tabla(sup: pd.DataFrame | None = None, precios: pd.DataFrame | None = 
     return pd.DataFrame(filas, columns=COLUMNAS)
 
 
+def armar_siembra(sup: pd.DataFrame) -> pd.DataFrame:
+    """Hectáreas y rendimiento de cada cultivo de la ESPAC en cada provincia (año ANIO_AHORA)."""
+    clave_app = {espac: clave for clave, (espac, _, _, _) in CULTIVOS.items()}
+    pesa = {espac: producto for _, (espac, _, producto, _) in CULTIVOS.items()}
+    filas = []
+    for cultivo, grupo in sup[sup["anio"] == ANIO_AHORA].groupby("cultivo"):
+        pais = grupo[["plantada", "cosechada", "produccion"]].sum(min_count=1)
+        if pd.isna(pais["plantada"]) or pais["plantada"] <= 0:
+            continue
+        rinde_pais = pais["produccion"] / pais["cosechada"] if pais["cosechada"] > 0 else None
+        antes = sup[(sup["anio"] == ANIO_ANTES) & (sup["cultivo"] == cultivo)].set_index("prov")["plantada"]
+        for _, f in grupo.iterrows():
+            if f["prov"] not in PROVINCIAS or pd.isna(f["plantada"]) or f["plantada"] <= 0:
+                continue
+            rinde = f["produccion"] / f["cosechada"] if pd.notna(f["cosechada"]) and f["cosechada"] > 0 else None
+            previa = antes.get(f["prov"])
+            filas.append({
+                "cultivo_espac": cultivo.split(" (")[0], "cultivo": clave_app.get(cultivo, ""),
+                "provincia": PROVINCIAS[f["prov"]], "anio": ANIO_AHORA,
+                "superficie_ha": round(f["plantada"]),
+                "var_superficie_pct": None if previa is None or pd.isna(previa) or previa <= 0
+                else round(100 * (f["plantada"] / previa - 1), 1),
+                "rendimiento_t_ha": None if rinde is None or pd.isna(rinde) else round(rinde, 2),
+                "rendimiento_pais_t_ha": None if rinde_pais is None or pd.isna(rinde_pais) else round(rinde_pais, 2),
+                "rendimiento_producto": pesa.get(cultivo, cultivo.split(" (")[-1].rstrip(")").lower()),
+            })
+    return pd.DataFrame(filas).sort_values(["provincia", "superficie_ha"], ascending=[True, False])
+
+
 def principal(argumentos: list[str]) -> None:
-    tabla = armar_tabla()
+    sup = leer_superficie()
+    tabla = armar_tabla(sup)
+    siembra = armar_siembra(sup)
     ver = tabla[["cultivo", "provincia", "var_superficie_pct", "var_precio_pct", "rendimiento_t_ha"]].copy()
     ver["resultado"] = [clasificar(a, b) for a, b in zip(tabla["var_superficie_pct"], tabla["var_precio_pct"])]
     print(ver.to_string(index=False))
@@ -233,6 +268,8 @@ def principal(argumentos: list[str]) -> None:
         return
     tabla.to_csv(TABLAS / "mercado.csv", index=False, encoding="utf-8", lineterminator="\n")
     print("Escrito:", TABLAS / "mercado.csv")
+    siembra.to_csv(TABLAS / "siembra_provincias.csv", index=False, encoding="utf-8", lineterminator="\n")
+    print("Escrito:", TABLAS / "siembra_provincias.csv", f"({len(siembra)} filas)")
 
 
 if __name__ == "__main__":
