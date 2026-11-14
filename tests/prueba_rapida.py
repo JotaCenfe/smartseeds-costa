@@ -19,7 +19,8 @@ from src.aptitud import aptitud, cargar_requisitos  # noqa: E402
 from src.clima_relieve import corregir_temp_por_altura, nombre_tile, pendiente_grados  # noqa: E402
 from src.config import provincia_sugerida, zona_de_punto  # noqa: E402
 from src.mercado import clasificar, mercado  # noqa: E402
-from src.recomendar import recomendar, reparto_mejor_cultivo, suelo_detalle  # noqa: E402
+from src.recomendar import (empatados, evaluar_todos, recomendar, reparto_mejor_cultivo,  # noqa: E402
+                            suelo_detalle, tiempo_texto)
 
 req = cargar_requisitos().set_index("cultivo")
 
@@ -49,12 +50,39 @@ top = recomendar(costa, "Santo Domingo de los Tsáchilas")
 assert len(top) == 3 and all(c["puntaje"] >= 40 for c in top)
 assert not {"papa", "quinua", "haba"} & {c["cultivo"] for c in top}
 
+# --- Riego: reduce la falta de agua, pero no la borra ni arregla otras cosas ---
+seco = {"altura": 5, "pendiente": 2, "temp": 27.7, "lluvia": 770,           # como Daule
+        "humedad": None, "encharcamiento": None, "vegetacion": None}
+regado = dict(seco, riego=True)
+for nombre in ("arroz", "banano", "cacao"):
+    c = req.loc[nombre].to_dict()
+    assert aptitud(seco, c) < aptitud(regado, c) < 100                       # mejora, pero no llega a 100
+assert aptitud(regado, req.loc["arroz"].to_dict()) > aptitud(regado, req.loc["banano"].to_dict())  # falta menos agua
+assert aptitud(regado, req.loc["maiz_duro"].to_dict()) == aptitud(seco, req.loc["maiz_duro"].to_dict()) == 100
+assert aptitud(dict(costa, riego=True), req.loc["cacao"].to_dict()) == 100   # si llueve bastante, no cambia nada
+assert aptitud(dict(sierra, riego=True), req.loc["cacao"].to_dict()) < 40    # el riego no quita el frío
+assert aptitud(dict(inundado, riego=True), req.loc["cacao"].to_dict()) ==     aptitud(inundado, req.loc["cacao"].to_dict())                            # ni la inundación
+
+# Si el radar vio agua en el terreno, al arroz no se le dice que "se seca rápido"
+arrozal = dict(costa, pendiente=1, encharcamiento=0.37, humedad=0.25, humedad_confiable=0.9)
+assert aptitud(arrozal, req.loc["arroz"].to_dict()) == 100
+
+# --- Empates: el orden depende de lo que prefiere el agricultor, no de la tabla ---
+pronto = evaluar_todos(costa, "Guayas", preferencia="pronto")
+largo = evaluar_todos(costa, "Guayas", preferencia="largo")
+assert [c["cultivo"] for c in pronto[:3]] == ["maiz_duro", "arroz", "maracuya"]      # 4, 4 y 8 meses
+assert [c["cultivo"] for c in largo[:3]] == ["banano", "platano", "cafe_robusta"]    # permanentes primero
+assert {c["cultivo"]: c["puntaje"] for c in pronto} == {c["cultivo"]: c["puntaje"] for c in largo}
+assert {"cacao", "banano"} <= {c["cultivo"] for c in empatados(pronto)}              # empatados fuera del top 3
+assert "4 meses" in tiempo_texto(req.loc["maiz_duro"].to_dict())
+assert "3 años" in tiempo_texto(req.loc["cacao"].to_dict()) and tiempo_texto({}) is None
+
 # --- Suelo (catálogo del equipo): se informa, pero no cambia el puntaje -------
 suelo_cacao = suelo_detalle("cacao")
 assert suelo_cacao and "pH entre 6 y 7" in suelo_cacao["texto"] and "Agrocalidad" in suelo_cacao["fuente"]
 assert "pH" not in suelo_detalle("papa")["texto"]                  # pH de la papa: pendiente en el catálogo
 assert suelo_detalle("banano") is None                             # no está en el catálogo -> sin dato
-assert any(c["suelo"] for c in top if c["cultivo"] == "cacao")
+assert any(c["suelo"] for c in pronto if c["cultivo"] == "cacao")
 
 # --- Mercado ----------------------------------------------------------------
 assert clasificar(15, -3) == "saturado"
@@ -99,7 +127,8 @@ assert prom["altura"] == 420 and prom["encharcamiento"] == 0.25 and prom["humeda
 chico = [(-79.3001, -0.4001), (-79.3000, -0.4001), (-79.3000, -0.4000)]   # más pequeño que una celda
 assert len(terreno.celdas_del_terreno(tabla_inv, chico)) == 1        # usa la celda más cercana
 partes = reparto_mejor_cultivo(adentro)
-assert {p["cultivo"] for p in partes} == {"arroz", "cacao"}          # la mitad inundada -> arroz
+assert {p["cultivo"] for p in partes} == {"arroz", "maiz_duro"}      # la mitad inundada -> arroz
+assert {p["cultivo"] for p in reparto_mejor_cultivo(adentro, preferencia="largo")} == {"arroz", "banano"}
 assert abs(sum(p["fraccion"] for p in partes) - 1) < 1e-9
 
 # --- Capas NISAR con matrices de prueba -------------------------------------
@@ -114,4 +143,20 @@ rel = nisar.humedad_relativa(hh)
 assert rel[0, 0, 0] == 0 and rel[3, 0, 0] == 1      # seco al inicio, húmedo al final
 assert abs(nisar.a_db(np.array([0.1]))[0] + 10) < 1e-5
 
-print("TODO BIEN: aptitud, suelo, mercado, clima/relieve, zonas, terreno dibujado y capas NISAR.")
+# Serie del radar de un terreno (lo que dibuja el gráfico de la app): 4 fechas, rejilla 3x3
+agua = np.zeros((4, 3, 3), dtype="float32")
+agua[:2, 0, 0] = 1.0                                # la celda 0 estuvo cubierta de agua 2 fechas
+series = {"fechas": ["2026-06-21", "2026-07-03", "2026-07-15", "2026-07-27"],
+          "hh": hh, "hv": hv, "agua": agua,
+          "fechas_humedad": ["2026-06-21", "2026-07-03"],
+          "sm": np.full((2, 3, 3), 0.25, dtype="float32")}
+st0 = nisar.serie_del_terreno(series, [0])
+assert st0["agua"].tolist() == [1, 1, 0, 0]
+assert st0["vegetacion"].isna().tolist() == [True, True, False, False]   # sobre el agua no vale
+assert st0["humedad"].iloc[0] == 0.5 and st0["humedad"].isna().sum() == 2   # 0,25 m³/m³ = 50 %
+st2 = nisar.serie_del_terreno(series, [0, 4])       # terreno dibujado: promedio de 2 celdas
+assert st2["agua"].tolist() == [0.5, 0.5, 0, 0]
+vacio = dict(series, hh=np.full_like(hh, np.nan), hv=np.full_like(hv, np.nan))
+assert nisar.serie_del_terreno(vacio, [0]) is None  # fuera de la franja del radar
+
+print("TODO BIEN: aptitud, riego, empates, suelo, mercado, clima/relieve, zonas, terreno dibujado y capas NISAR.")

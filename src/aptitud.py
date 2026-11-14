@@ -26,6 +26,18 @@ MARGEN_LLUVIA = 0.30       # 30 % por debajo del mínimo / por encima del máxim
 MARGEN_PENDIENTE = 15      # grados por encima de la pendiente máxima
 PESO_PEOR_FACTOR = 0.6
 HUMEDAD_CONFIABLE_MIN = 0.5   # mínimo de datos "recomendados" para usar la humedad en el puntaje
+AGUA_VISIBLE = 0.05           # el terreno "tuvo agua" si el radar la vio en al menos el 5 % de las pasadas
+
+# Riego. El agricultor dice si tiene riego (celda["riego"] = True). Regla:
+#   - El riego SOLO arregla la FALTA de agua (poca lluvia, suelo que se seca).
+#     No cambia la altura, la temperatura, la pendiente, el exceso de lluvia ni la inundación.
+#   - Tampoco borra la falta de agua: la reduce. Mientras más agua haya que poner
+#     con el riego, menos puntos. Así "tengo riego" no pone a todos los cultivos en 100.
+#   - Nota de lluvia con riego = 1 - PESO_FALTA_AGUA_CON_RIEGO x (parte del agua que falta).
+#     Ejemplo: si la lluvia cubre el 77 % de lo que pide el cultivo, falta el 23 % y la
+#     nota es 1 - 0,5 x 0,23 = 0,89. Si no lloviera nada, la nota sería 0,5.
+# El 0,5 es un valor inicial sin calibrar (declararlo como limitación).
+PESO_FALTA_AGUA_CON_RIEGO = 0.5
 
 
 def cargar_requisitos(ruta=None) -> pd.DataFrame:
@@ -97,6 +109,17 @@ def aptitud_detalle(celda: dict, cultivo: dict) -> dict:
                       "llueve poco", "llueve demasiado"),
     ]
 
+    # Riego: si la lluvia no alcanza pero hay riego, la falta resta menos (ver regla arriba)
+    riego = celda.get("riego") is True
+    lluvia = _num(celda.get("lluvia"))
+    if riego and lluvia is not None and ll_min is not None and lluvia < ll_min:
+        falta = ll_min - lluvia
+        factores[-1] = {
+            "factor": "Lluvia", "nota": 1 - PESO_FALTA_AGUA_CON_RIEGO * falta / ll_min,
+            "texto": f"Lluvia {lluvia:.0f} mm/año: no alcanza (necesita mínimo {ll_min:g} mm/año). "
+                     f"Con tu riego sí se puede, pero tendrás que regar lo que falta: "
+                     f"unos {falta:.0f} mm al año"}
+
     # Pendiente: solo tiene máximo
     pendiente = _num(celda.get("pendiente"))
     if pendiente is None:
@@ -143,8 +166,18 @@ def aptitud_detalle(celda: dict, cultivo: dict) -> dict:
         factores.append({"factor": "Humedad", "nota": nota, "texto": texto})
     else:
         nota = 1.0 if hum >= 0.5 else max(0.0, hum / 0.5)
-        texto = ("Humedad del suelo: el terreno retiene agua, bueno para este cultivo" if nota >= 1
-                 else "Humedad del suelo: el terreno se seca rápido para este cultivo")
+        if nota >= 1:
+            texto = "Humedad del suelo: el terreno retiene agua, bueno para este cultivo"
+        elif ench is not None and ench >= AGUA_VISIBLE:
+            # El radar vio agua sobre el terreno: no tiene sentido decir que "se seca rápido"
+            nota = 1.0
+            texto = "Humedad del suelo: el radar vio agua acumulada en el terreno, bueno para este cultivo"
+        elif riego:
+            nota = 1 - PESO_FALTA_AGUA_CON_RIEGO * (1 - nota)
+            texto = ("Humedad del suelo: el terreno se seca rápido para este cultivo; "
+                     "con tu riego se compensa en parte")
+        else:
+            texto = "Humedad del suelo: el terreno se seca rápido para este cultivo"
         factores.append({"factor": "Humedad", "nota": nota, "texto": texto})
 
     notas = [f["nota"] for f in factores if f["nota"] is not None]

@@ -248,12 +248,51 @@ streamlit run app/app.py             # abre la app en http://localhost:8501
 | `app/app.py` | Mapa: tocas un terreno y muestra los 3 mejores cultivos con sus razones. Nivel nacional con clima real de NASA POWER. |
 | `src/terreno.py` | **Terreno dibujado.** En la app se elige "✏️ Dibujar mi terreno" y se marcan las esquinas (sirve para terrenos irregulares y grandes; también hay rectángulo, corregir y borrar). Calcula el tamaño en hectáreas y cuadras, promedia los cuadros de ~250 m que caen dentro y, si el terreno es grande, dice qué cultivo conviene en cada parte. Un terreno más pequeño que un cuadro (~6 ha) usa el cuadro donde está. |
 | `src/config.py` | Rutas, zonas de demostración y formato de la tabla por celda. **Aquí se agrega la zona de la Sierra.** |
-| `src/aptitud.py` | Puntaje 0–100 por cultivo y razones en lenguaje sencillo. |
+| `src/aptitud.py` | Puntaje 0–100 por cultivo y razones en lenguaje sencillo. Incluye la regla del **riego** (ver abajo). |
 | `src/mercado.py` | Regla alta / media / saturado. Devuelve "sin datos" hasta llenar `tablas/mercado.csv`. |
 | `src/recomendar.py` | Une aptitud + mercado. También adjunta a cada cultivo el **suelo que prefiere** (pH, textura, drenaje) leído de `tablas/suelo_cultivos.csv`. |
 | `tablas/suelo_cultivos.csv` | Suelo preferido de 15 cultivos, copiado del catálogo del equipo (`catalogo_cultivos_v01`, 14 nov) con su fuente y página. Se **muestra** en la ficha del cultivo, pero **no entra en el puntaje**: son rangos reportados por cada manual y la app todavía no mide el suelo del terreno. |
 | `src/clima_relieve.py` | NASA POWER probado. NASADEM → tabla por celda: probado. Santo Domingo ya está en `datos/procesados/celdas_santo_domingo.csv` (32.400 celdas de ~250 m). Para otra zona: `python -m src.clima_relieve NOMBRE_ZONA`. |
 | `src/nisar.py` | **Probado con datos reales.** Lee en remoto solo el recorte de la zona (~15 MB por archivo en vez de 7 GB). Santo Domingo ya tiene 11 fechas GCOV y 10 fechas SME2 procesadas. |
+
+### Riego, empates y tiempos de cultivo (14 nov)
+La app hace dos preguntas sencillas al agricultor antes de recomendar.
+
+**¿Tienes riego en tu terreno?**
+- El riego solo arregla la **falta de agua** (poca lluvia o suelo que se seca rápido). No cambia la
+  altura, la temperatura, la pendiente, el exceso de lluvia ni las inundaciones.
+- Tampoco borra la falta: la **reduce**. Mientras más agua haya que regar, menos puntos. Así, marcar
+  "sí tengo riego" no pone a todos los cultivos en 100.
+- Fórmula: nota de lluvia con riego = 1 − 0,5 × (parte del agua que falta). Si la lluvia cubre el 77 % de
+  lo que pide el cultivo, la nota es 0,89; si no lloviera nada, sería 0,5. El 0,5 es un valor inicial
+  **sin calibrar**.
+- Ejemplo real, terreno seco de Daule (770 mm de lluvia): sin riego, arroz 48 y banano 33; con riego,
+  arroz 92 y banano 88. El maíz duro sigue en 100 porque no le falta agua. En Santo Domingo el riego no
+  cambia nada, porque ahí la lluvia alcanza.
+- La app dice cuánta agua falta ("tendrás que regar lo que falta: unos 230 mm al año").
+
+**¿Qué buscas?** (cosechar pronto / un cultivo para muchos años)
+- Muchos cultivos empatan en el mismo puntaje (en Santo Domingo, 8 sacan 100). Antes se mostraban los
+  tres primeros de la tabla. Ahora los empatados se ordenan por mercado y luego por esta respuesta:
+  "pronto" pone primero al que da cosecha más rápido; "muchos años" pone primero a los permanentes.
+- **No cambia el puntaje**, solo el orden entre empatados. La app avisa qué otros cultivos tienen la misma
+  aptitud que el tercero.
+- Cada cultivo muestra cuánto tarda la primera cosecha y de qué tipo es (columnas `ciclo_meses` y `tipo`
+  de `requisitos_cultivos.csv`, todavía **preliminares**). No hay datos de costos: solo se dice que un
+  cultivo permanente suele pedir más inversión al inicio.
+
+### El radar a la vista en la app (14 nov)
+- **Gráfico por terreno:** en las zonas detalladas, debajo de los datos del radar, hay un desplegable
+  "📈 Ver lo que vio el radar en cada pasada". Muestra tres gráficos pequeños, uno por medida:
+  vegetación, agua sobre el terreno y humedad del suelo, fecha por fecha. Sirve para un punto y para un
+  terreno dibujado (promedia sus celdas). Ejemplo real, terreno inundado de Daule: el agua cubre el 92 %
+  del terreno en junio, baja al 8 % en septiembre y vuelve al 75 % a fines de octubre.
+- **Capa sobre el mapa:** encima del mapa se elige qué pintar (agua, vegetación o humedad). Cada capa usa
+  un solo color, de claro (poco) a oscuro (mucho); en gris, donde el radar no tiene datos.
+- **Corrección:** sobre el agua el índice de vegetación sale alto por error (HH y HV son casi ruido). Ahora
+  las pasadas en que más de la mitad de la celda era agua no cuentan para la vegetación. Cambió la
+  vegetación de 1.439 celdas de Daule (4 %); el resto de la tabla quedó igual.
+- La app lee `nisar_ZONA.npz` y `humedad_ZONA.npz` (unos 3 MB por zona); no procesa nada en vivo.
 
 ### NISAR: cómo se procesó y qué salió (14 nov, Santo Domingo)
 ```
@@ -287,10 +326,10 @@ comandos, usando `daule` como nombre de zona.
   97 % de las celdas. La NASA marca como "recomendado" el dato en el **49 %** de las celdas (en Santo Domingo
   era el 6 %), así que aquí la humedad sí cuenta en el puntaje de la mitad de los terrenos.
 - **Aquí NISAR sí cambia la recomendación.** Terreno inundado (`?lat=-1.9356&lon=-79.6511`, agua en el 37 %
-  de las pasadas): el único cultivo que supera el mínimo es **arroz** (46/100). Terreno seco
-  (`?lat=-1.8156&lon=-79.6733`): maíz duro 100, maracuyá 92 y yuca 92.
-- **Limitaciones:** NASA POWER da 770 mm de lluvia al año para toda la zona, por eso el arroz pierde puntos
-  por "llueve poco" aunque ahí se riega; la app no sabe de riego. El umbral de −18 dB no está calibrado:
+  de las pasadas): el único cultivo que supera el mínimo es **arroz** (49/100 sin riego, 92/100 con riego).
+  Terreno seco (`?lat=-1.8156&lon=-79.6733`): maíz duro 100, maracuyá 92 y yuca 92.
+- **Limitaciones:** NASA POWER da 770 mm de lluvia al año para toda la zona, por eso sin riego el arroz
+  pierde puntos por "llueve poco"; hay que marcar "Sí, tengo riego". El umbral de −18 dB no está calibrado:
   una superficie lisa y oscura puede ser agua, un arrozal inundado o suelo liso recién preparado.
 
 ### Pendientes por rol
@@ -298,7 +337,7 @@ comandos, usando `daule` como nombre de zona.
   El catálogo del equipo trae el **suelo** (pH, textura, drenaje) pero no la altura, la temperatura ni la lluvia que usa el puntaje. Para poder recomendar los cultivos nuevos del catálogo (fréjol, arveja, lenteja, chocho, trigo, cebada, amaranto, tomate, soya) falta sacar esos tres rangos de las mismas fuentes y agregarlos a `requisitos_cultivos.csv`. Rosa, clavel, aguacate, mora y uvilla todavía no tienen ningún dato.
 - **Mercado:** llenar `tablas/mercado.csv` (una fila por cultivo y provincia, o `nacional`): `var_superficie_pct` (ESPAC) y `var_precio_pct` (SIPA).
 - **Radar:** la segunda zona ya está (Daule, ver arriba). Falta calibrar el umbral de agua y buscar fechas de época lluviosa. Cada archivo GCOV pesa ~7 GB: no descargar, usar la lectura remota.
-- **Programación:** gráfico de la serie del radar por terreno, capa NISAR sobre el mapa, textos en inglés para la entrega, subir a GitHub.
+- **Programación:** textos en inglés para la entrega y publicar la app (cuando estén unidas la Costa y la Sierra). El gráfico del radar y la capa sobre el mapa ya están.
 
 ### Uso de IA (declarar en la página del proyecto)
 La estructura y el código inicial se escribieron con ayuda de un asistente de IA (Claude, de Anthropic)

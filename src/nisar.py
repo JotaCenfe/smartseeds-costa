@@ -33,6 +33,7 @@ UMBRAL_AGUA_DB = -18.0        # HH por debajo de esto = agua abierta. CALIBRAR c
 RUTA_SME2 = "/science/LSAR/SME2/grids"   # humedad de suelo nivel 3, celdas de 200 m
 HUMEDAD_SATURACION = 0.5      # m³/m³ que se toma como suelo saturado (humedad = 1)
 PENDIENTE_MAX_AGUA = 10.0     # en laderas más inclinadas lo oscuro es sombra del radar, no agua
+AGUA_TAPA_VEGETACION = 0.5    # si más de la mitad de la celda es agua, el índice de vegetación no vale
 
 
 # ---------------------------------------------------------------------------
@@ -422,7 +423,12 @@ def capas_a_tabla(clave_zona: str):
     tabla = pd.read_csv(ruta_celdas(clave_zona))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)      # celdas sin ningún dato
-        vegetacion = capa_vegetacion(s["hh"], s["hv"])
+        # Sobre el agua, HH y HV son casi puro ruido y el índice de vegetación sale alto
+        # por error: esas fechas no cuentan para la vegetación de la celda.
+        con_agua = s["agua"] >= AGUA_TAPA_VEGETACION
+        vegetacion = capa_vegetacion(np.where(con_agua, np.nan, s["hh"]),
+                                     np.where(con_agua, np.nan, s["hv"]))
+        vegetacion = np.where(np.isnan(vegetacion) & ~np.isnan(s["hh"]).all(axis=0), 0.0, vegetacion)
         encharcamiento = np.nanmean(s["agua"], axis=0)
     # En laderas inclinadas lo oscuro es sombra del radar, no agua acumulada
     pendiente = tabla["pendiente"].to_numpy().reshape(encharcamiento.shape)
@@ -441,6 +447,62 @@ def capas_a_tabla(clave_zona: str):
         tabla["humedad_confiable"] = confiable.ravel().round(2)
     tabla.to_csv(ruta_celdas(clave_zona), index=False)
     return tabla
+
+
+# ---------------------------------------------------------------------------
+# Serie del radar de un terreno (para el gráfico de la app)
+# ---------------------------------------------------------------------------
+def cargar_series(clave_zona: str) -> dict | None:
+    """Series ya procesadas de una zona, en memoria. None si la zona no tiene radar.
+
+    Devuelve {"fechas", "hh", "hv", "agua"} y, si existe la humedad,
+    {"fechas_humedad", "sm"}. Las matrices tienen forma [fecha, fila, columna].
+    """
+    if not ruta_serie(clave_zona).exists():
+        return None
+    with np.load(ruta_serie(clave_zona)) as s:
+        series = {"fechas": [str(f) for f in s["fechas"]],
+                  "hh": s["hh"], "hv": s["hv"], "agua": s["agua"]}
+    if ruta_humedad(clave_zona).exists():
+        with np.load(ruta_humedad(clave_zona)) as h:
+            series["fechas_humedad"] = [str(f) for f in h["fechas"]]
+            series["sm"] = h["sm"]
+    return series
+
+
+def serie_del_terreno(series: dict, celdas) -> "pd.DataFrame | None":  # noqa: F821
+    """Lo que vio el radar en un terreno, pasada por pasada.
+
+    `celdas` son los números de celda del terreno (columna `celda` de la tabla): uno
+    solo si se tocó un punto, varios si se dibujó el contorno. Devuelve una tabla con
+    una fila por fecha y las columnas (todas de 0 a 1, vacías si no hubo dato):
+        vegetacion  índice de vegetación del radar (RVI) de esa pasada
+        agua        parte del terreno que se vio como agua
+        humedad     humedad del suelo (1 = saturado)
+    Devuelve None si el radar no cubre ese terreno.
+    """
+    import warnings
+
+    import pandas as pd
+    celdas = np.asarray(list(celdas), dtype=int)
+    columnas = series["hh"].shape[2]
+    fil, col = celdas // columnas, celdas % columnas
+    with warnings.catch_warnings(), np.errstate(invalid="ignore", divide="ignore"):
+        warnings.simplefilter("ignore", RuntimeWarning)        # fechas o celdas sin dato
+        hh = np.nanmean(series["hh"][:, fil, col], axis=1)     # promedio en potencia lineal
+        hv = np.nanmean(series["hv"][:, fil, col], axis=1)
+        agua = np.nanmean(series["agua"][:, fil, col], axis=1)
+        vegetacion = np.clip(4 * hv / (hh + hv), 0, 1)
+        vegetacion[agua >= AGUA_TAPA_VEGETACION] = np.nan      # sobre el agua el índice no vale
+        tabla = pd.DataFrame({"vegetacion": vegetacion, "agua": agua},
+                             index=pd.to_datetime(series["fechas"]))
+        if "sm" in series:
+            sm = np.nanmean(series["sm"][:, fil, col], axis=1)
+            humedad = pd.Series(np.clip(sm / HUMEDAD_SATURACION, 0, 1),
+                                index=pd.to_datetime(series["fechas_humedad"]), name="humedad")
+            tabla = tabla.join(humedad, how="outer")
+    tabla.index.name = "fecha"
+    return None if tabla["vegetacion"].isna().all() else tabla
 
 
 if __name__ == "__main__":

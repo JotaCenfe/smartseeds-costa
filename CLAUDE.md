@@ -1,7 +1,7 @@
 # SmartSeeds · contexto para retomar el trabajo
 
 Archivo de traspaso. Resume lo que no se ve leyendo el código: decisiones, hallazgos
-y en qué punto quedó cada cosa. Estado al sábado 14 de noviembre de 2026, 11:40.
+y en qué punto quedó cada cosa. Estado al sábado 14 de noviembre de 2026, 13:40.
 El detalle de instalación y recursos está en `README.md` y `README_PROGRAMADOR.md`.
 
 ## El proyecto
@@ -59,6 +59,7 @@ Enlace directo a un terreno para demos: `http://localhost:8501/?lat=-0.33&lon=-7
 Contratos acordados: tabla por celda `celda, lat, lon, altura, pendiente, temp, lluvia, humedad,
 encharcamiento, vegetacion` (más `humedad_confiable`); `aptitud(celda, cultivo) -> 0..100`;
 `mercado(cultivo, provincia) -> alta / media / saturado / sin_datos`.
+La celda puede llevar además la clave opcional `riego` (True si el agricultor dice que tiene riego); la pone la app, no está en la tabla.
 
 Regla de oro: **todo lo pesado se calcula antes** y la app solo lee archivos pequeños.
 
@@ -93,9 +94,27 @@ Clave `daule`. Recuadro: lon −80.05 a −79.65, lat −2.05 a −1.65. Órbita
 - HH mediana −8,2 dB, HV −16,8 dB. RVI entre 0,33 y 0,80 (campo abierto).
 - Encharcamiento: 7,2 % de las celdas con agua en ≥ 5 % de las pasadas; 3,8 % en ≥ 10 %; 0,3 % en ≥ 30 %. El agua baja de junio a septiembre y sube a fines de octubre.
 - Humedad media 0,27 m³/m³; dato "recomendado" en el 49 % de las celdas.
-- **Aquí NISAR sí cambia el orden.** Terreno inundado `?lat=-1.9356&lon=-79.6511`: solo arroz (46). Terreno seco `?lat=-1.8156&lon=-79.6733`: maíz duro 100, maracuyá 92, yuca 92.
-- POWER da 770 mm/año para toda la zona: el arroz pierde puntos por lluvia aunque ahí se riega. La app no sabe de riego (posible mejora: si el radar ve agua, no castigar la lluvia a los cultivos que toleran inundación; no está hecho ni acordado).
+- **Aquí NISAR sí cambia el orden.** Terreno inundado `?lat=-1.9356&lon=-79.6511`: solo arroz (49 sin riego, 92 con riego). Terreno seco `?lat=-1.8156&lon=-79.6733`: maíz duro 100, maracuyá 92, yuca 92; con riego el arroz sube de 48 a 92 y el banano de 33 a 88.
+- POWER da 770 mm/año para toda la zona: sin riego el arroz pierde puntos por lluvia. Para la demo de Daule hay que marcar "Sí, tengo riego".
 - Al ejecutar Python fuera de Miniforge Prompt, `matplotlib` falla sin mensaje (código 127) si `envs/condor/Library/bin` no está en el PATH.
+
+## Riego, empates y tiempos de cultivo (decidido con el usuario el 14 nov)
+
+- **Riego:** la app pregunta "¿Tienes riego?". El usuario pidió expresamente que marcar "sí" **no** infle todos los puntajes. Regla en `src/aptitud.py`: el riego solo reduce la falta de agua (lluvia bajo el mínimo y suelo que se seca), nunca la borra y no toca nada más. Nota de lluvia con riego = 1 − 0,5 × (parte del agua que falta). El 0,5 (`PESO_FALTA_AGUA_CON_RIEGO`) está sin calibrar.
+- **Empates:** en Santo Domingo 8 de 15 cultivos sacan 100 (9 en un terreno plano, de hasta 5° de pendiente, porque entra el arroz). `evaluar_todos()` ordena los empatados por mercado y luego por la pregunta "¿Qué buscas?" (`preferencia="pronto"` o `"largo"`). El puntaje no cambia. `empatados()` lista los que quedan fuera del top 3 con la misma aptitud.
+- **Tiempos:** cada cultivo muestra la primera cosecha (`ciclo_meses`) y el tipo. Son valores preliminares. No hay datos de costos y no se deben inventar.
+- Se descartó desempatar por "qué tan al centro del rango está el terreno": con rangos sin verificar daba un orden que no se puede defender (y la altura mínima 0 lo rompe en la Costa). El arreglo de fondo es tener rango óptimo y tolerable de FAO EcoCrop.
+- Si el radar vio agua en el terreno, ya no se le dice al arroz que "el suelo se seca rápido".
+- **Heladas:** no aplican en la Costa (Daule: mínima de 18,6 °C; Santo Domingo llega a 2.401 m con media de 11,5 °C). Quedan para la Sierra.
+- **Publicar la app:** el usuario decidió esperar a unir Sierra y Costa. No publicar antes.
+
+## El radar en la app (hecho el 14 nov)
+
+- **Gráfico por terreno:** `nisar.cargar_series()` y `nisar.serie_del_terreno()` leen `nisar_ZONA.npz` y `humedad_ZONA.npz` y devuelven vegetación, agua y humedad por fecha. La app los muestra como tres gráficos pequeños (`st.line_chart`, sin librerías nuevas), uno por medida, nunca dos escalas en un mismo gráfico.
+- **Capa sobre el mapa:** `folium.raster_layers.ImageOverlay` con una imagen RGBA de 180×180 armada desde la tabla por celda. Un solo color por capa, de claro a oscuro; gris donde no hay radar. Funciona con `st_folium` agregándola directo al mapa.
+- **Vegetación sobre agua:** el RVI no vale cuando la celda es agua (sale ~1 por ruido). `AGUA_TAPA_VEGETACION = 0.5` descarta esas fechas, tanto en la tabla (`capas`) como en el gráfico.
+- En `st.cache_data`, un parámetro que empieza con guion bajo **no** entra en la clave de la caché: por eso `modificado` (fecha del archivo) va sin guion bajo.
+- Probado en pantalla: gráfico en el terreno inundado de Daule y capa de agua. Las capas de vegetación y humedad, y el gráfico con un terreno dibujado, solo por código.
 
 ## Pedidos del programador de la Sierra (14 nov) y qué falta
 
@@ -120,7 +139,7 @@ Analizados contra la app actual. Nada de esto está hecho todavía, salvo lo mar
    - El "Maíz" del catálogo (libro de cultivos andinos) se asoció a `maiz_suave`; falta confirmarlo con el equipo.
 3. **Mercado:** `tablas/mercado.csv` solo tiene encabezados. Falta ESPAC y SIPA.
 4. **Subir a GitHub** (repositorio público) y publicar en Streamlit Community Cloud con `requirements.txt`.
-5. Mejoras de la app: gráfico de la serie del radar por terreno, capa NISAR sobre el mapa, textos en inglés.
+5. Mejoras de la app: textos en inglés. (El gráfico de la serie del radar y la capa NISAR sobre el mapa ya están hechos.)
 6. Integrar la zona de la Sierra (Cotopaxi y Tungurahua) que prepara el otro programador.
 
 ## Limitaciones a declarar en la entrega

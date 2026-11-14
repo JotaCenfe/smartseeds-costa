@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 import folium
+import numpy as np
 import pandas as pd
 import streamlit as st
 from branca.element import MacroElement
@@ -23,9 +24,12 @@ if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
 from src.clima_relieve import cargar_celdas, celda_mas_cercana, clima_power, ruta_celdas  # noqa: E402
-from src.config import CAPITALES, ZONAS, en_ecuador, provincia_sugerida, zona_de_punto  # noqa: E402
+from src.config import (CAPITALES, ZONAS, en_ecuador, forma_rejilla, provincia_sugerida,  # noqa: E402
+                        zona_de_punto)
+from src.nisar import cargar_series, ruta_serie, serie_del_terreno  # noqa: E402
 from src.mercado import ETIQUETAS  # noqa: E402
-from src.recomendar import PUNTAJE_MINIMO, evaluar_todos, reparto_mejor_cultivo  # noqa: E402
+from src.aptitud import AGUA_VISIBLE  # noqa: E402
+from src.recomendar import PUNTAJE_MINIMO, empatados, evaluar_todos, reparto_mejor_cultivo  # noqa: E402
 from src.terreno import area_texto, celda_promedio, celdas_del_terreno, vertices_de_geojson  # noqa: E402
 from src.terreno import centro as centro_terreno  # noqa: E402  (aquí `centro` es el centro del mapa)
 
@@ -34,7 +38,33 @@ st.set_page_config(page_title="SmartSeeds", page_icon="🌱", layout="wide")
 CENTRO_ECUADOR, ZOOM_ECUADOR = (-1.4, -78.6), 7
 ICONO_MERCADO = {"alta": "🟢", "media": "🟡", "saturado": "🔴", "sin_datos": "⚪"}
 MODO_PUNTO, MODO_DIBUJO = "📍 Tocar un punto", "✏️ Dibujar mi terreno"
-AGUA_VISIBLE = 0.05   # una celda "tuvo agua" si el radar la vio en al menos el 5 % de las pasadas
+RIEGO_NO, RIEGO_SI = "No, solo lluvia", "Sí, tengo riego"
+
+# Capas del radar que se pueden pintar sobre el mapa: nombre -> columna de la tabla por celda.
+# Cada capa usa UN solo color, de claro (poco) a oscuro (mucho).
+CAPAS_RADAR = {"Nada": None, "Agua (dónde se encharca)": "encharcamiento",
+               "Vegetación": "vegetacion", "Humedad del suelo": "humedad"}
+RAMPA_AZUL = ((0x86, 0xB6, 0xEF), (0x0D, 0x36, 0x6B))
+RAMPA_VERDE = ((0xC8, 0xE6, 0xC0), (0x00, 0x63, 0x00))
+RAMPAS = {"encharcamiento": RAMPA_AZUL, "humedad": RAMPA_AZUL, "vegetacion": RAMPA_VERDE}
+GRIS_SIN_RADAR = (137, 135, 129, 110)     # celdas que el radar no cubre
+OPACIDAD_CAPA = 200                       # de 0 (invisible) a 255 (tapa el mapa)
+AGUA_MUCHA = 0.5                          # agua en la mitad de las pasadas = azul más oscuro
+COLOR_LINEA = {"light": "#2a78d6", "dark": "#3987e5"}
+
+# Gráficos de la serie del radar: columna -> (título, cómo leerlo)
+GRAFICOS_RADAR = {
+    "vegetacion": ("Vegetación (0 = suelo desnudo, 100 = vegetación densa)",
+                   "Si la línea sube, las plantas están creciendo. Si baja de golpe, suele ser "
+                   "cosecha o preparación del terreno. No hay dato en las pasadas en que el "
+                   "terreno estaba cubierto de agua."),
+    "agua": ("Agua sobre el terreno (% del terreno)",
+             "Parte del terreno que el radar vio cubierta de agua en cada pasada."),
+    "humedad": ("Humedad del suelo (100 = suelo saturado)",
+                "Humedad que midió el radar (producto SME2 de NISAR). Bajo vegetación muy "
+                "densa es poco confiable."),
+}
+PREFERENCIAS = {"Cosechar pronto": "pronto", "Un cultivo para muchos años": "largo"}
 
 # Textos en español de la herramienta de dibujo del mapa (vienen en inglés)
 DIBUJO_EN_ESPANOL = """
@@ -78,9 +108,49 @@ def clima(lat: float, lon: float) -> dict:
     return clima_power(lat, lon)
 
 
+# `modificado` es la fecha del archivo: si el archivo cambia, la caché se renueva sola.
 @st.cache_data(show_spinner=False)
-def celdas(clave_zona: str, _modificado: float) -> pd.DataFrame:
+def celdas(clave_zona: str, modificado: float) -> pd.DataFrame:
     return cargar_celdas(clave_zona)
+
+
+@st.cache_data(show_spinner=False)
+def series_radar(clave_zona: str, modificado: float) -> dict | None:
+    return cargar_series(clave_zona)
+
+
+@st.cache_data(show_spinner=False)
+def imagen_capa(clave_zona: str, columna: str, modificado: float) -> np.ndarray | None:
+    """Imagen (fila, columna, RGBA) de una capa del radar, lista para ponerla sobre el mapa."""
+    tabla = cargar_celdas(clave_zona)
+    if tabla is None or columna not in tabla:
+        return None
+    filas, columnas, _ = forma_rejilla(ZONAS[clave_zona]["recuadro"])
+    valor = tabla[columna].to_numpy(dtype="float64").reshape(filas, columnas)
+    sin_radar = tabla["vegetacion"].isna().to_numpy().reshape(filas, columnas)
+    if columna == "encharcamiento":           # solo se pinta donde hubo agua
+        visible, tono = valor >= AGUA_VISIBLE, np.clip(valor / AGUA_MUCHA, 0, 1)
+    else:
+        visible, tono = ~np.isnan(valor), np.clip(valor, 0, 1)
+    tono = np.nan_to_num(tono)
+    claro, oscuro = RAMPAS[columna]
+    imagen = np.zeros((filas, columnas, 4), dtype="uint8")
+    for i in range(3):
+        imagen[..., i] = (claro[i] + (oscuro[i] - claro[i]) * tono).astype("uint8")
+    imagen[..., 3] = np.where(visible, OPACIDAD_CAPA, 0)
+    imagen[sin_radar] = GRIS_SIN_RADAR
+    return imagen
+
+
+def leyenda_capa(columna: str) -> str:
+    """Barrita de color con "poco" y "mucho" para explicar la capa pintada en el mapa."""
+    claro, oscuro = ("#%02x%02x%02x" % c for c in RAMPAS[columna])
+    return (f'<div style="display:flex;align-items:center;gap:8px;font-size:0.85rem">'
+            f'<span>poco</span><div style="flex:1;max-width:220px;height:10px;border-radius:4px;'
+            f'background:linear-gradient(90deg,{claro},{oscuro})"></div><span>mucho</span>'
+            f'<span style="margin-left:12px;display:inline-block;width:12px;height:12px;'
+            f'border-radius:3px;background:rgb(137,135,129)"></span><span>sin datos del radar</span>'
+            f'</div>')
 
 
 def datos_del_terreno(lat: float, lon: float, contorno=None):
@@ -141,9 +211,21 @@ col_mapa, col_resultado = st.columns([3, 2], gap="large")
 
 with col_mapa:
     modo = st.radio("¿Cómo quieres marcar tu terreno?", [MODO_PUNTO, MODO_DIBUJO], horizontal=True)
+    capa = CAPAS_RADAR[st.selectbox(
+        "Pintar sobre el mapa lo que vio el radar NISAR", list(CAPAS_RADAR),
+        help="Pinta las zonas detalladas (recuadros verdes) con lo que midió el radar "
+             "entre junio y octubre de 2026.")]
+    if capa:
+        st.markdown(leyenda_capa(capa), unsafe_allow_html=True)
     mapa = folium.Map(location=centro, zoom_start=zoom, control_scale=True)
-    for z in ZONAS.values():
+    for clave, z in ZONAS.items():
         lon_min, lat_min, lon_max, lat_max = z["recuadro"]
+        if capa and ruta_celdas(clave).exists():
+            imagen = imagen_capa(clave, capa, ruta_celdas(clave).stat().st_mtime)
+            if imagen is not None:
+                folium.raster_layers.ImageOverlay(
+                    imagen, bounds=[[lat_min, lon_min], [lat_max, lon_max]], origin="upper",
+                    pixelated=True, interactive=False).add_to(mapa)
         folium.Rectangle([(lat_min, lon_min), (lat_max, lon_max)], color="#2e7d32", weight=2,
                          fill=True, fill_opacity=0.05, tooltip=f"Zona detallada: {z['nombre']}",
                          interactive=False).add_to(mapa)
@@ -250,6 +332,24 @@ with col_resultado:
                 con_agua = (celdas_contorno["encharcamiento"] >= AGUA_VISIBLE).mean()
                 st.caption(f"El radar vio agua acumulada en el {con_agua:.0%} de tu terreno "
                            "en alguna de sus pasadas.")
+            # Serie del radar: lo que vio en cada pasada sobre este terreno
+            numeros = (celdas_contorno["celda"].tolist() if celdas_contorno is not None
+                       else [int(celda["celda"])])
+            series = (series_radar(clave_zona, ruta_serie(clave_zona).stat().st_mtime)
+                      if ruta_serie(clave_zona).exists() else None)
+            serie = serie_del_terreno(series, numeros) if series else None
+            if serie is not None:
+                with st.expander("📈 Ver lo que vio el radar en cada pasada"):
+                    tema = getattr(getattr(st.context, "theme", None), "type", None) or "light"
+                    for columna, (titulo, ayuda) in GRAFICOS_RADAR.items():
+                        datos = (serie[columna] * 100).dropna() if columna in serie else None
+                        if datos is None or datos.empty:
+                            continue
+                        st.markdown(f"**{titulo}**")
+                        st.line_chart(datos.rename("valor"), height=170,
+                                      x_label="Fecha de la pasada",
+                                      color=COLOR_LINEA.get(tema, COLOR_LINEA["light"]))
+                        st.caption(ayuda)
         else:
             st.caption("Este punto queda fuera de la franja que cubre el radar en esta órbita.")
 
@@ -259,7 +359,18 @@ with col_resultado:
                              index=provincias.index(sugerida), key=f"prov_{lat}_{lon}",
                              help="Se sugiere la más cercana; corrígela si no es la tuya.")
 
-    todos = evaluar_todos(celda, provincia)
+    # Dos preguntas sencillas al agricultor. No dependen del terreno elegido: se conservan.
+    riego = st.radio("¿Tienes riego en tu terreno?", [RIEGO_NO, RIEGO_SI], horizontal=True,
+                     key="riego",
+                     help="Con riego, la falta de lluvia resta menos puntos, pero no desaparece: "
+                          "mientras más agua haya que regar, menos puntos. El riego no cambia "
+                          "el clima, la pendiente ni las inundaciones.") == RIEGO_SI
+    preferencia = PREFERENCIAS[st.radio(
+        "¿Qué buscas?", list(PREFERENCIAS), horizontal=True, key="preferencia",
+        help="No cambia el puntaje. Solo decide el orden cuando varios cultivos empatan.")]
+    celda["riego"] = riego
+
+    todos = evaluar_todos(celda, provincia, preferencia=preferencia)
     mejores = [x for x in todos if x["puntaje"] >= PUNTAJE_MINIMO][:3]
 
     st.subheader("Cultivos recomendados")
@@ -274,6 +385,8 @@ with col_resultado:
             st.progress(min(1.0, cultivo["puntaje"] / 100))
             st.markdown(f"{ICONO_MERCADO[cultivo['mercado']]} **{ETIQUETAS[cultivo['mercado']]}** — "
                         f"{cultivo['mercado_texto']}")
+            if cultivo.get("tiempo_texto"):
+                st.markdown(f"⏱️ {cultivo['tiempo_texto']}")
             with st.expander("¿Por qué?", expanded=(i == 1)):
                 for f in cultivo["factores"]:
                     icono = "•" if f["nota"] is None else "✅" if f["nota"] >= 1 else \
@@ -284,9 +397,17 @@ with col_resultado:
                     st.caption(f"Dato de referencia: la app todavía no mide el suelo de tu terreno, "
                                f"así que no cuenta en el puntaje. Fuente: {cultivo['suelo']['fuente']}")
 
+    # Empates: se avisa cuáles otros cultivos tienen la misma aptitud que el tercero
+    iguales = empatados(todos) if len(mejores) == 3 else []
+    if iguales:
+        st.info(f"**Con la misma aptitud ({mejores[-1]['puntaje']:.0f}/100) también están:** "
+                + ", ".join(x["nombre"] for x in iguales)
+                + ". Cuando varios cultivos empatan, se ordenan según lo que elegiste en "
+                  "\"¿Qué buscas?\". Compara sus tiempos en la tabla de abajo.")
+
     # Terreno grande: no todo el terreno es igual, se muestra qué conviene en cada parte
     if celdas_contorno is not None and len(celdas_contorno) > 1:
-        reparto = reparto_mejor_cultivo(celdas_contorno)
+        reparto = reparto_mejor_cultivo(celdas_contorno, riego=riego, preferencia=preferencia)
         if len(reparto) > 1:
             st.subheader("Tu terreno no es igual en todas partes")
             st.caption("Mejor cultivo en cada parte del terreno, mirando cuadro por cuadro:")
@@ -299,8 +420,12 @@ with col_resultado:
 with st.expander("Ver todos los cultivos evaluados"):
     st.dataframe(
         pd.DataFrame([{"Cultivo": x["nombre"], "Aptitud": x["puntaje"],
+                       "Primera cosecha (meses)": x["meses"],
+                       "Tipo": str(x["tipo"]).replace("_", " "),
                        "Mercado": ETIQUETAS[x["mercado"]]} for x in todos]),
         hide_index=True, use_container_width=True,
-        column_config={"Aptitud": st.column_config.ProgressColumn(
-            "Aptitud (0–100)", min_value=0, max_value=100, format="%.0f")},
+        column_config={
+            "Aptitud": st.column_config.ProgressColumn(
+                "Aptitud (0–100)", min_value=0, max_value=100, format="%.0f"),
+            "Primera cosecha (meses)": st.column_config.NumberColumn(format="%d")},
     )
