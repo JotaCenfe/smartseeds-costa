@@ -246,10 +246,12 @@ streamlit run app/app.py             # abre la app en http://localhost:8501
 | Archivo | Estado |
 |---|---|
 | `app/app.py` | Mapa: tocas un terreno y muestra los 3 mejores cultivos con sus razones. Nivel nacional con clima real de NASA POWER. |
+| `src/terreno.py` | **Terreno dibujado.** En la app se elige "✏️ Dibujar mi terreno" y se marcan las esquinas (sirve para terrenos irregulares y grandes; también hay rectángulo, corregir y borrar). Calcula el tamaño en hectáreas y cuadras, promedia los cuadros de ~250 m que caen dentro y, si el terreno es grande, dice qué cultivo conviene en cada parte. Un terreno más pequeño que un cuadro (~6 ha) usa el cuadro donde está. |
 | `src/config.py` | Rutas, zonas de demostración y formato de la tabla por celda. **Aquí se agrega la zona de la Sierra.** |
 | `src/aptitud.py` | Puntaje 0–100 por cultivo y razones en lenguaje sencillo. |
 | `src/mercado.py` | Regla alta / media / saturado. Devuelve "sin datos" hasta llenar `tablas/mercado.csv`. |
-| `src/recomendar.py` | Une aptitud + mercado. |
+| `src/recomendar.py` | Une aptitud + mercado. También adjunta a cada cultivo el **suelo que prefiere** (pH, textura, drenaje) leído de `tablas/suelo_cultivos.csv`. |
+| `tablas/suelo_cultivos.csv` | Suelo preferido de 15 cultivos, copiado del catálogo del equipo (`catalogo_cultivos_v01`, 14 nov) con su fuente y página. Se **muestra** en la ficha del cultivo, pero **no entra en el puntaje**: son rangos reportados por cada manual y la app todavía no mide el suelo del terreno. |
 | `src/clima_relieve.py` | NASA POWER probado. NASADEM → tabla por celda: probado. Santo Domingo ya está en `datos/procesados/celdas_santo_domingo.csv` (32.400 celdas de ~250 m). Para otra zona: `python -m src.clima_relieve NOMBRE_ZONA`. |
 | `src/nisar.py` | **Probado con datos reales.** Lee en remoto solo el recorte de la zona (~15 MB por archivo en vez de 7 GB). Santo Domingo ya tiene 11 fechas GCOV y 10 fechas SME2 procesadas. |
 
@@ -268,10 +270,34 @@ python -m src.nisar santo_domingo capas      # llena vegetacion, encharcamiento 
 - **Limitación a declarar:** en esta zona y época, las capas NISAR todavía no cambian el orden de los cultivos. Para que el radar pese en la recomendación hacen falta fechas de época lluviosa o una zona con inundación real (por ejemplo, arroceras de Los Ríos o Guayas).
 - La app acepta un enlace directo a un terreno: `http://localhost:8501/?lat=-0.33&lon=-79.12`.
 
+### NISAR: segunda zona, Daule – Salitre – Samborondón (14 nov)
+Zona arrocera de Guayas. Recuadro: lon −80.05 a −79.65, lat −2.05 a −1.65. Se procesó con los mismos
+comandos, usando `daule` como nombre de zona.
+- **Por qué esta zona:** se midió el agua visible (HH menor a −18 dB) en una fecha de cada candidata.
+  21 de junio: Babahoyo 1,5 %, Daule 1,5 %, Vinces 0,1 %. 31 de octubre: Daule 4,0 %, Babahoyo 3,0 %.
+  En la imagen del radar lo oscuro tiene forma de ríos y de parcelas, no de ruido.
+- **Datos usados:** GCOV `frequencyB`, órbita 112 descendente (frames 89 y 90), **10 fechas**, 21 jun – 31 oct 2026.
+- **Cobertura:** el radar cubre el **100 %** de las celdas (32.400 celdas de ~250 m).
+- **Retrodispersión:** HH mediana −8,2 dB y HV −16,8 dB. Vegetación (RVI) entre 0,33 y 0,80:
+  campo abierto y cultivos, no bosque denso como en Santo Domingo.
+- **Encharcamiento:** el 7,2 % de las celdas tuvo agua en al menos el 5 % de las pasadas, el 3,8 % en al
+  menos el 10 % y el 0,3 % en al menos el 30 %. El agua visible baja de 1,5 % (junio) a 0,1 % (septiembre)
+  y sube a 4,0 % a fines de octubre.
+- **Humedad (SME2):** 9 fechas, 21 jun – 19 oct 2026. Media 0,27 m³/m³ (53 % de saturación), con dato en el
+  97 % de las celdas. La NASA marca como "recomendado" el dato en el **49 %** de las celdas (en Santo Domingo
+  era el 6 %), así que aquí la humedad sí cuenta en el puntaje de la mitad de los terrenos.
+- **Aquí NISAR sí cambia la recomendación.** Terreno inundado (`?lat=-1.9356&lon=-79.6511`, agua en el 37 %
+  de las pasadas): el único cultivo que supera el mínimo es **arroz** (46/100). Terreno seco
+  (`?lat=-1.8156&lon=-79.6733`): maíz duro 100, maracuyá 92 y yuca 92.
+- **Limitaciones:** NASA POWER da 770 mm de lluvia al año para toda la zona, por eso el arroz pierde puntos
+  por "llueve poco" aunque ahí se riega; la app no sabe de riego. El umbral de −18 dB no está calibrado:
+  una superficie lisa y oscura puede ser agua, un arrozal inundado o suelo liso recién preparado.
+
 ### Pendientes por rol
 - **Cultivos:** `tablas/requisitos_cultivos.csv` tiene valores **preliminares** (aproximados). Verificar cada uno con FAO EcoCrop / INIAP y quitar la palabra PRELIMINAR de la columna `notas`.
+  El catálogo del equipo trae el **suelo** (pH, textura, drenaje) pero no la altura, la temperatura ni la lluvia que usa el puntaje. Para poder recomendar los cultivos nuevos del catálogo (fréjol, arveja, lenteja, chocho, trigo, cebada, amaranto, tomate, soya) falta sacar esos tres rangos de las mismas fuentes y agregarlos a `requisitos_cultivos.csv`. Rosa, clavel, aguacate, mora y uvilla todavía no tienen ningún dato.
 - **Mercado:** llenar `tablas/mercado.csv` (una fila por cultivo y provincia, o `nacional`): `var_superficie_pct` (ESPAC) y `var_precio_pct` (SIPA).
-- **Radar:** decidir la segunda zona (una con inundación real haría brillar a NISAR) y buscar fechas de época lluviosa. Cada archivo GCOV pesa ~7 GB: no descargar, usar la lectura remota.
+- **Radar:** la segunda zona ya está (Daule, ver arriba). Falta calibrar el umbral de agua y buscar fechas de época lluviosa. Cada archivo GCOV pesa ~7 GB: no descargar, usar la lectura remota.
 - **Programación:** gráfico de la serie del radar por terreno, capa NISAR sobre el mapa, textos en inglés para la entrega, subir a GitHub.
 
 ### Uso de IA (declarar en la página del proyecto)

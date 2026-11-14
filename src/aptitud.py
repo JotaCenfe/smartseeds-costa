@@ -116,7 +116,7 @@ def aptitud_detalle(celda: dict, cultivo: dict) -> dict:
     else:
         limite = {"si": None, "parcial": 0.6}.get(tolera, 0.3)   # "no" o vacío -> 0.3
         nota = 1.0 if limite is None else max(0.0, 1 - ench / limite)
-        if ench < 0.05:
+        if ench < 0.005:   # menos del 0,5 %: se redondea a "nada" (en un terreno dibujado es un promedio)
             texto = "Encharcamiento: el radar no vio agua acumulada en el terreno"
         elif limite is None:
             texto = f"Encharcamiento: se inunda {ench:.0%} de las fechas, y este cultivo lo tolera"

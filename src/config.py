@@ -22,6 +22,16 @@ ZONAS = {
         "nisar_path": 76,
         "nisar_direccion": "ASCENDING",
     },
+    "daule": {
+        "nombre": "Daule – Salitre – Samborondón (Costa, zona arrocera)",
+        "recuadro": (-80.05, -2.05, -79.65, -1.65),
+        # La mayor parte del recuadro es Guayas; el borde este toca Los Ríos.
+        "provincia": "Guayas",
+        # Elegida el 14 nov por ser la candidata con más agua visible en el radar.
+        # Órbita 112 descendente (frames 89 y 90): 10 fechas GCOV, 21 jun – 31 oct 2026.
+        "nisar_path": 112,
+        "nisar_direccion": "DESCENDING",
+    },
     # "sierra": {...}   # POR DEFINIR: agregar aquí la zona de la Sierra
 }
 
