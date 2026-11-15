@@ -81,6 +81,10 @@ def medir(t: pd.DataFrame, entradas: list[str], semilla: int = 0) -> dict:
     cuantas = t.loc[sirve, "etiqueta"].value_counts()
     sirve &= t["etiqueta"].isin(cuantas[cuantas >= MINIMO_POR_CLASE].index)
     x, y = t.loc[sirve, entradas], t.loc[sirve, "etiqueta"]
+    if y.nunique() < 2 or t.loc[sirve, "bloque"].nunique() < 5:
+        return {"celdas": len(y), "estado": "datos_insuficientes",
+                "clases": y.value_counts().to_dict(),
+                "bloques": int(t.loc[sirve, "bloque"].nunique())}
     modelo = RandomForestClassifier(n_estimators=200, min_samples_leaf=5, class_weight="balanced",
                                     n_jobs=-1, random_state=semilla)
     dicho = pd.Series(cross_val_predict(modelo, x, y, groups=t.loc[sirve, "bloque"],
@@ -115,6 +119,10 @@ def probar(clave_zona: str) -> dict:
         if nombre not in resultado:
             continue
         r = resultado[nombre]
+        if r.get("estado") == "datos_insuficientes":
+            print(f"\n[{clave_zona}] {nombre}: datos insuficientes ({r['celdas']} celdas, "
+                  f"{r['bloques']} bloques, clases {r['clases']}).")
+            continue
         print(f"\n[{clave_zona}] {nombre}: {r['celdas']} celdas | acierto {r['acierto']:.0%} "
               f"(siempre lo más común: {r['acierto_diciendo_siempre_lo_mas_comun']:.0%}) | "
               f"promedio por clase {r['acierto_promedio_por_clase']:.0%}")
