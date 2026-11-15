@@ -1,7 +1,7 @@
 # SmartSeeds · contexto para retomar el trabajo
 
 Archivo de traspaso. Resume lo que no se ve leyendo el código: decisiones, hallazgos
-y en qué punto quedó cada cosa. Estado al sábado 14 de noviembre de 2026, 19:10.
+y en qué punto quedó cada cosa. Actualizado el sábado 14 de noviembre de 2026 (hora de Ecuador).
 El detalle de instalación y recursos está en `README.md` y `README_PROGRAMADOR.md`.
 
 ## El proyecto
@@ -141,7 +141,18 @@ Clave `daule`. Recuadro: lon −80.05 a −79.65, lat −2.05 a −1.65. Órbita
 - **Mercado por provincia: hecho** (ver la sección siguiente). Lo de este punto sobre "6 cultivos nacionales" y el boletín de diciembre quedó reemplazado.
 - La herramienta de lectura web de los subagentes dejó copias de los PDF y del CSV de EcoCrop (31 MB) en `C:\Users\PC\.claude\projects\C--condor\...\tool-results\`, fuera del repositorio.
 
-## Radar de la época lluviosa: Sentinel-1 (14 nov, 19:00)
+## Cultivos mapeados por el MAG (14 nov)
+
+- La ficha del terreno muestra los cultivos estimados por el MAG y el año de su mapa (2022 o 2025). Para un polígono, la app pondera cada cuadro por cuánto lo ocupa el terreno. Los períodos de arroz mapeado describen la cartografía histórica. El riego lo confirma el agricultor.
+- El selector «Capa del mapa» incluye «Cultivo mapeado (MAG)». Usa los CSV ya procesados en las zonas que los tienen. El gris de cobertura del radar no se aplica a esta capa. Las celdas sin color pueden contener cultivos que no están en las seis estimaciones consultadas.
+- Prueba de orden, pendiente de decisión: adelantar un cultivo mapeado en ≥ 50 % del cuadro si está a ≤ 10 puntos del mejor cultivo elegible, conservando el puntaje y el mínimo de aptitud. En 376 puntos históricos de arroz en Daule, el top 3 pasó de 126 a 264 al simular riego confirmado y de 76 a 77 sin riego. En los 374 puntos de Santo Domingo, el cultivo registrado entró al top 3 en 128 casos antes y 129 con la regla. La app conserva el orden vigente.
+- MapBiomas: se excluyó el código beta de banano 74 del grupo agropecuario y se acotaron las solicitudes de GDAL. Prueba de cobertura: el 79 % se refiere a los cuadros con clase dominante incluidos en la evaluación.
+- Sentinel-1: el procesamiento de agua conserva VV. La opción `--vh` guarda adicionalmente VH cuando la ráfaga la incluye. Para el piloto se seleccionan archivos concretos, porque el comando de una zona completa recorre todas las fechas.
+- Sierra: Cotopaxi y Tungurahua todavía no están como zonas detalladas en `src/config.py`. Al integrarlas, revisar qué capas del MAG cubren sus cultivos y qué nombres usan los puntos SIGTIERRAS. Luego ejecutar `cultivos_mapeados` (`descargar`, `tabla`, `comparar`) y `validar_campo` (`descargar`, `medir`) por zona.
+- Licencia y cita: ver «Cultivos mapeados y observaciones de campo» en el README. El catálogo de Datos Abiertos indica uso no comercial para las capas de 2022 consultadas. Queda por confirmar la variante exacta y las condiciones específicas de las capas de 2025 y de SIGTIERRAS.
+- Verificación: pasó `tests/prueba_rapida.py`. Streamlit AppTest abrió la ficha y seleccionó la capa en puntos de Daule y Santo Domingo con los CSV reales y NASA POWER simulado. También se comprobó la ponderación y ausencia de datos en un polígono representado por celdas, y la compatibilidad de VH con GeoTIFF y NPZ de prueba. Queda la comprobación visual del mapa en navegador.
+
+## Radar de la época lluviosa: Sentinel-1 (14 nov)
 
 El usuario autorizó procesar OPERA RTC-S1 sobre Daule ("Sí, procesar", ~1,8 GB de lectura). Hecho solo en Daule.
 
@@ -157,7 +168,7 @@ El usuario autorizó procesar OPERA RTC-S1 sobre Daule ("Sí, procesar", ~1,8 GB
 - **Para la Sierra:** mismos comandos; en laderas la banda C da sombras (la máscara y la regla de 10° ayudan). No se probó.
 - **Probado en pantalla:** el terreno de la demo nueva (aviso, puntaje, gráfico). **Solo por código:** la capa del mapa, un terreno dibujado.
 
-## Tipo de terreno con mapa de referencia (14 nov, 18:00)
+## Tipo de terreno con mapa de referencia (14 nov)
 
 El usuario entregó `TRASPASO_SMARTSEEDS.md` (revisión del commit `ea4e0a3` hecha en otra sesión) y `recolectar_referencia.py`, y pidió seguir su sección 4. Hecho: pasos 1 y 2, y la comprobación del paso 3.
 
@@ -243,7 +254,7 @@ Analizados contra la app actual. Nada de esto está hecho todavía, salvo lo mar
 - La temperatura por celda se ajusta por altura con un gradiente fijo de 6,5 °C por km.
 - El umbral de agua (HH < −18 dB) y la escala de humedad (0,5 m³/m³ = saturado) son valores iniciales sin calibrar.
 - El análisis de NISAR cubre solo la época seca de 2026. El invierno se mira con otro radar (Sentinel-1, banda C), de un solo año, y los dos radares coinciden poco cuadro por cuadro (27 %).
-- El tipo de terreno se aprendió de un mapa de 2021 (ESA WorldCover), no de trabajo de campo: coincide con él en el 79 % de los cuadros, y "agua" y "pasto" son sus clases más débiles.
+- El tipo de terreno se aprendió de un mapa de 2021 (ESA WorldCover), no de trabajo de campo: coincide con él en el 79 % de los cuadros con un tipo dominante incluidos en la evaluación, y "agua" y "pasto" son sus clases más débiles.
 - El suelo (SoilGrids) y la lluvia local (CHELSA) vienen de mapas mundiales hechos con modelos: son una orientación, no una medición del terreno. No son de la NASA.
 - Los rangos de los cultivos (FAO EcoCrop) son mundiales y el catálogo del equipo pide no tratarlos como reglas validadas. Los pesos de la lluvia de más, del agua en los vecinos y la franja de 5 puntos no están calibrados.
 - "Cómo les va a los cultivos cerca" es un dato de la provincia (ESPAC), no de los terrenos vecinos.

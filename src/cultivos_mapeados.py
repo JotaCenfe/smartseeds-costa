@@ -165,17 +165,39 @@ def cargar(clave_zona: str) -> pd.DataFrame | None:
     return pd.read_csv(ruta, keep_default_na=False, na_values=[""]) if ruta.exists() else None
 
 
-def texto_del_terreno(fila: dict, minimo: float = 0.05) -> list[str]:
-    """Frases para la pantalla: qué cultivos tiene mapeados el MAG en esa celda."""
+def resumen_del_terreno(tabla: pd.DataFrame, celdas: pd.DataFrame) -> dict | None:
+    """Combina las fracciones del MAG según cuánto ocupa el terreno de cada celda."""
+    cruce = celdas[["celda", "peso"]].merge(tabla, on="celda", how="left", validate="one_to_one")
+    pesos = cruce["peso"]
+    resultado = {}
+    for cultivo in CAPAS:
+        columna = f"ref_{cultivo}"
+        partes = cruce[columna]
+        validas = partes.notna()
+        if validas.any():
+            resultado[columna] = float(np.average(partes[validas], weights=pesos[validas]))
+    if not resultado:
+        return None
+
+    con_ciclos = cruce["arroz_ciclos"].notna() & cruce["ref_arroz"].gt(0)
+    if con_ciclos.any():
+        peso_arroz = pesos[con_ciclos] * cruce.loc[con_ciclos, "ref_arroz"]
+        resultado["arroz_ciclos"] = float(np.average(cruce.loc[con_ciclos, "arroz_ciclos"],
+                                                     weights=peso_arroz))
+    return resultado
+
+
+def texto_del_terreno(fila: dict, minimo: float = 0.05, superficie: str = "del cuadro") -> list[str]:
+    """Frases para la pantalla: qué cultivos tiene mapeados el MAG en la superficie analizada."""
     frases = []
     for cultivo, info in CAPAS.items():
         parte = pd.to_numeric(fila.get(f"ref_{cultivo}"), errors="coerce")
         if pd.isna(parte) or parte < minimo:
             continue
-        frase = f"{NOMBRES[cultivo]}: {parte:.0%} del cuadro, según el mapa del MAG de {info['anio']}"
+        frase = f"{NOMBRES[cultivo]}: {parte:.0%} {superficie}, según el mapa del MAG de {info['anio']}"
         ciclos = pd.to_numeric(fila.get("arroz_ciclos"), errors="coerce")
         if cultivo == "arroz" and not pd.isna(ciclos):
-            frase += f" (unas {ciclos:.1f} siembras en el año)"
+            frase += f" ({ciclos:.1f} períodos con arroz mapeado, en promedio)"
         frases.append(frase + ".")
     return frases
 
